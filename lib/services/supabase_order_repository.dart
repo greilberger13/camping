@@ -127,6 +127,7 @@ class SupabaseOrderRepository implements OrderRepository {
   }) {
     return {
       'site_id': siteId,
+      'booking_id': order.bookingId,
       'product_id': order.productId,
       'description': order.description,
       'quantity': order.quantity,
@@ -149,6 +150,7 @@ class SupabaseOrderRepository implements OrderRepository {
     final site = row['camp_sites'] as Map<String, dynamic>;
     return Order(
       id: row['id'] as String?,
+      bookingId: row['booking_id'] as String?,
       siteNumber: site['site_number'] as int,
       description: row['description'] as String,
       quantity: row['quantity'] as int,

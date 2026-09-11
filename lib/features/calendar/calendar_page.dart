@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/camping_dates.dart';
 import '../../models/calendar_event.dart';
+import '../../services/calendar_event_repository.dart';
 import '../../shared/widgets/page_frame.dart';
 
 String _formatCalendarDate(DateTime date) {
@@ -11,7 +12,9 @@ String _formatCalendarDate(DateTime date) {
 }
 
 class CalendarPage extends StatefulWidget {
-  const CalendarPage({super.key});
+  const CalendarPage({required this.repository, super.key});
+
+  final CalendarEventRepository repository;
 
   @override
   State<CalendarPage> createState() => _CalendarPageState();
@@ -20,26 +23,7 @@ class CalendarPage extends StatefulWidget {
 class _CalendarPageState extends State<CalendarPage> {
   DateTime selectedMonth = CampingDates.operationalDay;
 
-  final events = <CalendarEvent>[
-    const CalendarEvent(
-      title: 'Müllabfuhr',
-      date: '12.06.2026',
-      time: '07:00',
-      category: CalendarEventCategory.wasteCollection,
-    ),
-    const CalendarEvent(
-      title: 'Getränke-Anlieferung',
-      date: '13.06.2026',
-      time: '10:30',
-      category: CalendarEventCategory.delivery,
-    ),
-    const CalendarEvent(
-      title: 'Sommerfest am See',
-      date: '20.06.2026',
-      time: '18:00',
-      category: CalendarEventCategory.event,
-    ),
-  ];
+  List<CalendarEvent> get events => widget.repository.events;
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +40,12 @@ class _CalendarPageState extends State<CalendarPage> {
             onPrevious: () => _moveMonth(-1),
             onNext: () => _moveMonth(1),
             onAdd: _addEvent,
+          ),
+          const SizedBox(height: 16),
+          _CalendarMonthGrid(
+            month: selectedMonth,
+            events: visibleEvents,
+            onEventTap: (displayEvent) => _editEvent(displayEvent.source),
           ),
           const SizedBox(height: 16),
           Card(
@@ -85,7 +75,7 @@ class _CalendarPageState extends State<CalendarPage> {
       if (_isInSelectedMonth(event)) {
         result.add(_CalendarDisplayEvent(source: event, displayed: event));
       }
-      for (final occurrence in _nextOccurrences(event)) {
+      for (final occurrence in _occurrencesInSelectedMonth(event)) {
         if (_isInSelectedMonth(occurrence)) {
           result.add(
             _CalendarDisplayEvent(
@@ -98,6 +88,61 @@ class _CalendarPageState extends State<CalendarPage> {
       }
     }
     return result;
+  }
+
+  List<CalendarEvent> _occurrencesInSelectedMonth(CalendarEvent event) {
+    if (event.recurrence == CalendarEventRecurrence.none) {
+      return [];
+    }
+
+    final baseDate = _parseDate(event.date);
+    if (baseDate == null) {
+      return [];
+    }
+
+    final monthStart = DateTime(selectedMonth.year, selectedMonth.month, 1);
+    final monthEnd = DateTime(selectedMonth.year, selectedMonth.month + 1, 0);
+    final occurrences = <CalendarEvent>[];
+
+    if (event.recurrence == CalendarEventRecurrence.weekly) {
+      var date = baseDate;
+      if (date.isBefore(monthStart)) {
+        final days = monthStart.difference(date).inDays;
+        date = date.add(Duration(days: ((days + 6) ~/ 7) * 7));
+      }
+      while (!date.isAfter(monthEnd)) {
+        if (!date.isBefore(monthStart)) {
+          occurrences.add(_eventAtDate(event, date));
+        }
+        date = date.add(const Duration(days: 7));
+      }
+    } else {
+      final date = _addMonthForYear(baseDate, selectedMonth.year, selectedMonth.month);
+      if (date != null && !date.isBefore(monthStart) && !date.isAfter(monthEnd)) {
+        occurrences.add(_eventAtDate(event, date));
+      }
+    }
+
+    return occurrences;
+  }
+
+  CalendarEvent _eventAtDate(CalendarEvent event, DateTime date) {
+    return CalendarEvent(
+      title: event.title,
+      date: _formatDate(date),
+      time: event.time,
+      category: event.category,
+      recurrence: event.recurrence,
+    );
+  }
+
+  DateTime? _addMonthForYear(DateTime base, int year, int month) {
+    final targetMonth = DateTime(year, month, 1);
+    if (targetMonth.isBefore(DateTime(base.year, base.month, 1))) {
+      return null;
+    }
+    final lastDay = DateTime(year, month + 1, 0).day;
+    return DateTime(year, month, base.day.clamp(1, lastDay).toInt());
   }
 
   bool _isInSelectedMonth(CalendarEvent event) {
@@ -116,41 +161,6 @@ class _CalendarPageState extends State<CalendarPage> {
     });
   }
 
-  List<CalendarEvent> _nextOccurrences(CalendarEvent event) {
-    if (event.recurrence == CalendarEventRecurrence.none) {
-      return [];
-    }
-
-    final baseDate = _parseDate(event.date);
-    if (baseDate == null) {
-      return [];
-    }
-
-    final occurrences = <CalendarEvent>[];
-    var nextDate = baseDate;
-    for (var index = 0; index < 3; index++) {
-      nextDate = event.recurrence == CalendarEventRecurrence.weekly
-          ? nextDate.add(const Duration(days: 7))
-          : _addMonth(nextDate);
-      occurrences.add(
-        CalendarEvent(
-          title: event.title,
-          date: _formatDate(nextDate),
-          time: event.time,
-          category: event.category,
-          recurrence: event.recurrence,
-        ),
-      );
-    }
-    return occurrences;
-  }
-
-  DateTime _addMonth(DateTime date) {
-    final nextMonth = date.month == 12 ? 1 : date.month + 1;
-    final nextYear = date.month == 12 ? date.year + 1 : date.year;
-    final lastDay = DateTime(nextYear, nextMonth + 1, 0).day;
-    return DateTime(nextYear, nextMonth, date.day.clamp(1, lastDay));
-  }
 
   DateTime? _parseDate(String value) {
     final parts = value.split('.');
@@ -182,7 +192,8 @@ class _CalendarPageState extends State<CalendarPage> {
     );
 
     if (event != null) {
-      setState(() => events.add(event));
+      await widget.repository.create(event);
+      setState(() {});
     }
   }
 
@@ -193,12 +204,12 @@ class _CalendarPageState extends State<CalendarPage> {
     );
 
     if (updated != null) {
-      setState(() {
-        final index = events.indexOf(event);
-        if (index != -1) {
-          events[index] = updated;
-        }
-      });
+      if (event.id == null) {
+        await widget.repository.create(updated);
+      } else {
+        await widget.repository.update(updated.copyWith(id: event.id));
+      }
+      setState(() {});
     }
   }
 
@@ -222,7 +233,12 @@ class _CalendarPageState extends State<CalendarPage> {
     );
 
     if (confirmed == true) {
-      setState(() => events.remove(event));
+      if (event.id != null) {
+        await widget.repository.delete(event);
+      } else {
+        return;
+      }
+      setState(() {});
     }
   }
 }
@@ -237,6 +253,145 @@ class _CalendarDisplayEvent {
   final CalendarEvent source;
   final CalendarEvent displayed;
   final bool isOccurrence;
+}
+
+class _CalendarMonthGrid extends StatelessWidget {
+  const _CalendarMonthGrid({
+    required this.month,
+    required this.events,
+    required this.onEventTap,
+  });
+
+  final DateTime month;
+  final List<_CalendarDisplayEvent> events;
+  final ValueChanged<_CalendarDisplayEvent> onEventTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final firstDay = DateTime(month.year, month.month, 1);
+    final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
+    final leadingDays = firstDay.weekday - 1;
+    final totalCells = ((leadingDays + daysInMonth + 6) ~/ 7) * 7;
+    const weekDays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                for (final day in weekDays)
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        day,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: totalCells,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 7,
+                childAspectRatio: 0.9,
+              ),
+              itemBuilder: (context, index) {
+                final dayNumber = index - leadingDays + 1;
+                if (dayNumber < 1 || dayNumber > daysInMonth) {
+                  return const SizedBox.shrink();
+                }
+
+                final date = DateTime(month.year, month.month, dayNumber);
+                final dayEvents = events.where((event) {
+                  final eventDate = _parseDate(event.displayed.date);
+                  return eventDate?.year == date.year &&
+                      eventDate?.month == date.month &&
+                      eventDate?.day == date.day;
+                }).toList();
+
+                return Container(
+                  margin: const EdgeInsets.all(2),
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: const Color(0xffd9e1dc)),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('$dayNumber'),
+                      for (final event in dayEvents.take(2))
+                        GestureDetector(
+                          onTap: () => onEventTap(event),
+                          child: Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(top: 3),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 3,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _eventColor(event.displayed.category),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                            child: Text(
+                              event.displayed.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (dayEvents.length > 2)
+                        Text(
+                          '+${dayEvents.length - 2}',
+                          style: const TextStyle(fontSize: 10),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  DateTime? _parseDate(String value) {
+    final parts = value.split('.');
+    if (parts.length != 3) return null;
+    final day = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    final year = int.tryParse(parts[2]);
+    if (day == null || month == null || year == null) return null;
+    final parsed = DateTime(year, month, day);
+    return parsed.year == year && parsed.month == month && parsed.day == day
+        ? parsed
+        : null;
+  }
+
+  Color _eventColor(CalendarEventCategory category) {
+    switch (category) {
+      case CalendarEventCategory.wasteCollection:
+        return const Color(0xff61716d);
+      case CalendarEventCategory.delivery:
+        return const Color(0xff4269a4);
+      case CalendarEventCategory.event:
+        return const Color(0xffc47737);
+      case CalendarEventCategory.private:
+        return const Color(0xff7b6498);
+    }
+  }
 }
 
 class _EmptyCalendarState extends StatelessWidget {

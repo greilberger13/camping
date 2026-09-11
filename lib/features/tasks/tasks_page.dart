@@ -5,33 +5,26 @@ import '../../models/task.dart';
 import '../../shared/widgets/page_frame.dart';
 
 class TasksPage extends StatefulWidget {
-  const TasksPage({required this.orders, super.key});
+  const TasksPage({
+    required this.orders,
+    required this.tasks,
+    required this.onTaskAdded,
+    required this.onTaskUpdated,
+    required this.onOrderUpdated,
+    super.key,
+  });
 
   final List<Order> orders;
+  final List<CampingTask> tasks;
+  final ValueChanged<CampingTask> onTaskAdded;
+  final ValueChanged<CampingTask> onTaskUpdated;
+  final ValueChanged<Order> onOrderUpdated;
 
   @override
   State<TasksPage> createState() => _TasksPageState();
 }
 
 class _TasksPageState extends State<TasksPage> {
-  final tasks = <CampingTask>[
-    const CampingTask(
-      title: 'Brötchen besorgen',
-      quantity: '7 Bestellungen',
-      category: TaskCategory.bakery,
-    ),
-    const CampingTask(
-      title: 'Getränke nachbestellen',
-      quantity: '4 Artikel',
-      category: TaskCategory.kiosk,
-    ),
-    const CampingTask(
-      title: 'Müllsäcke einkaufen',
-      quantity: 'Campingbedarf',
-      category: TaskCategory.camping,
-    ),
-  ];
-
   @override
   Widget build(BuildContext context) {
     return PageFrame(
@@ -52,13 +45,13 @@ class _TasksPageState extends State<TasksPage> {
           Card(
             child: Column(
               children: [
-                for (var index = 0; index < tasks.length; index++)
+                for (var index = 0; index < widget.tasks.length; index++)
                   _TaskTile(
-                    task: tasks[index],
+                    task: widget.tasks[index],
                     onChanged: (value) {
-                      setState(() {
-                        tasks[index] = tasks[index].copyWith(isDone: value);
-                      });
+                      widget.onTaskUpdated(
+                        widget.tasks[index].copyWith(isDone: value),
+                      );
                     },
                   ),
               ],
@@ -73,7 +66,10 @@ class _TasksPageState extends State<TasksPage> {
                   ),
             ),
             const SizedBox(height: 12),
-            _OrderSummary(orders: widget.orders),
+            _OrderSummary(
+              orders: widget.orders,
+              onOrderUpdated: widget.onOrderUpdated,
+            ),
           ],
         ],
       ),
@@ -87,47 +83,80 @@ class _TasksPageState extends State<TasksPage> {
     );
 
     if (task != null) {
-      setState(() => tasks.add(task));
+      widget.onTaskAdded(task);
     }
   }
 }
 
 class _OrderSummary extends StatelessWidget {
-  const _OrderSummary({required this.orders});
+  const _OrderSummary({
+    required this.orders,
+    required this.onOrderUpdated,
+  });
 
   final List<Order> orders;
+  final ValueChanged<Order> onOrderUpdated;
 
   @override
   Widget build(BuildContext context) {
-    final quantities = <String, int>{};
-    final categories = <String, String>{};
+    final groupedOrders = <String, List<Order>>{};
 
     for (final order in orders.where(
       (order) => order.status == OrderStatus.open,
     )) {
-      quantities.update(
-        order.description,
-        (quantity) => quantity + order.quantity,
-        ifAbsent: () => order.quantity,
-      );
-      categories[order.description] = order.categoryLabel;
+      groupedOrders.putIfAbsent(order.description, () => []).add(order);
     }
 
     return Card(
       child: Column(
         children: [
-          for (final entry in quantities.entries)
-            ListTile(
-              leading: const Icon(Icons.shopping_basket_outlined),
-              title: Text(entry.key),
-              subtitle: Text(categories[entry.key] ?? 'Bestellung'),
-              trailing: Text(
-                '${entry.value} ×',
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
+          for (final entry in groupedOrders.entries)
+            _OrderTaskTile(
+              description: entry.key,
+              orders: entry.value,
+              onComplete: () {
+                for (final order in entry.value) {
+                  onOrderUpdated(order.copyWith(status: OrderStatus.completed));
+                }
+              },
+            ),
+          if (groupedOrders.isEmpty)
+            const ListTile(
+              leading: Icon(Icons.check_circle_outline),
+              title: Text('Keine offenen Bestellungen'),
             ),
         ],
       ),
+    );
+  }
+}
+
+class _OrderTaskTile extends StatelessWidget {
+  const _OrderTaskTile({
+    required this.description,
+    required this.orders,
+    required this.onComplete,
+  });
+
+  final String description;
+  final List<Order> orders;
+  final VoidCallback onComplete;
+
+  @override
+  Widget build(BuildContext context) {
+    final quantity = orders.fold<int>(
+      0,
+      (sum, order) => sum + order.quantity,
+    );
+    final category = orders.first.categoryLabel;
+
+    return CheckboxListTile(
+      value: false,
+      onChanged: (_) => onComplete(),
+      secondary: const Icon(Icons.shopping_basket_outlined),
+      title: Text(description),
+      subtitle: Text('$quantity × · $category'),
+      controlAffinity: ListTileControlAffinity.trailing,
     );
   }
 }

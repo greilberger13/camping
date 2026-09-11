@@ -6,19 +6,22 @@ enum TaskCategory {
 
 class CampingTask {
   const CampingTask({
+    this.id,
     required this.title,
     required this.quantity,
     required this.category,
     this.isDone = false,
   });
 
+  final String? id;
   final String title;
   final String quantity;
   final TaskCategory category;
   final bool isDone;
 
-  CampingTask copyWith({bool? isDone}) {
+  CampingTask copyWith({String? id, bool? isDone}) {
     return CampingTask(
+      id: id ?? this.id,
       title: title,
       quantity: quantity,
       category: category,

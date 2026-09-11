@@ -76,8 +76,14 @@ aktiviert Row Level Security. Es werden absichtlich noch keine offenen anon-
 Schreibrechte vergeben. Fuer den Betrieb ohne sichtbare Anmeldung wird ein
 geschuetzter Server- oder Edge-Function-Zugriff benoetigt.
 
-Die Repository-Schicht liegt unter `lib/services/`. Fuer Buchungen gibt es
-bereits eine lokale In-Memory-Implementierung und eine Supabase-Implementierung.
+Die Repository-Schicht liegt unter `lib/services/`. Fuer Buchungen, Artikel,
+Bestellungen, Aufenthaltsnotizen, Stellplaetze, Kalendertermine und Aufgaben
+gibt es lokale In-Memory-Fallbacks sowie Supabase-Implementierungen.
+
+Die zweite Migration
+`supabase/migrations/202609110002_order_groups_and_tasks.sql` bereitet
+Sammelbestellungen mit mehreren Positionen sowie idempotente Aufgaben aus
+Bestellpositionen vor.
 
 Der Lageplan liegt unter `assets/Lageplan.jpg` und ist in `pubspec.yaml` als
 Flutter-Asset registriert. Die Stellplatznummern werden als anklickbare

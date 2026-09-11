@@ -13,6 +13,7 @@ enum CalendarEventRecurrence {
 
 class CalendarEvent {
   const CalendarEvent({
+    this.id,
     required this.title,
     required this.date,
     required this.time,
@@ -20,11 +21,23 @@ class CalendarEvent {
     this.recurrence = CalendarEventRecurrence.none,
   });
 
+  final String? id;
   final String title;
   final String date;
   final String time;
   final CalendarEventCategory category;
   final CalendarEventRecurrence recurrence;
+
+  CalendarEvent copyWith({String? id}) {
+    return CalendarEvent(
+      id: id ?? this.id,
+      title: title,
+      date: date,
+      time: time,
+      category: category,
+      recurrence: recurrence,
+    );
+  }
 
   String get categoryLabel {
     switch (category) {

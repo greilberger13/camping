@@ -7,65 +7,80 @@ class BookingOrderDialog extends StatefulWidget {
   const BookingOrderDialog({
     required this.siteNumber,
     required this.products,
+    this.bookingId,
     super.key,
   });
 
   final int siteNumber;
   final List<OrderProduct> products;
+  final String? bookingId;
 
   @override
   State<BookingOrderDialog> createState() => _BookingOrderDialogState();
 }
 
 class _BookingOrderDialogState extends State<BookingOrderDialog> {
-  int quantity = 1;
-  String? productId;
+  final quantities = <String, int>{};
+  String? selectedProductId;
 
   @override
   Widget build(BuildContext context) {
+    final selectedProducts = widget.products
+        .where((product) => quantities.containsKey(product.id))
+        .toList();
+
     return AlertDialog(
       title: Text('Bestellung für Platz ${widget.siteNumber}'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            DropdownButtonFormField<String>(
-              initialValue: productId,
-              decoration: const InputDecoration(labelText: 'Artikel'),
-              items: [
-                for (final product in widget.products)
-                  DropdownMenuItem(
-                    value: product.id,
-                    child: Text(
-                      '${product.name} · ${product.unitPrice.toStringAsFixed(2)} €',
-                    ),
-                  ),
-              ],
-              onChanged: (value) {
-                setState(() => productId = value);
-              },
-              validator: (value) => value == null ? 'Artikel auswählen' : null,
-            ),
-            const SizedBox(height: 12),
             Row(
               children: [
-                const Text('Menge'),
-                const Spacer(),
-                IconButton(
-                  onPressed: () {
-                    if (quantity > 1) {
-                      setState(() => quantity--);
-                    }
-                  },
-                  icon: const Icon(Icons.remove_circle_outline),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: selectedProductId,
+                    decoration: const InputDecoration(labelText: 'Artikel'),
+                    items: [
+                      for (final product in widget.products)
+                        DropdownMenuItem(
+                          value: product.id,
+                          child: Text(product.name),
+                        ),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() {
+                        selectedProductId = value;
+                        quantities.putIfAbsent(value, () => 1);
+                      });
+                    },
+                  ),
                 ),
-                Text('$quantity'),
+                const SizedBox(width: 8),
                 IconButton(
-                  onPressed: () => setState(() => quantity++),
-                  icon: const Icon(Icons.add_circle_outline),
+                  onPressed: selectedProductId == null
+                      ? null
+                      : () => setState(() => selectedProductId = null),
+                  tooltip: 'Auswahl leeren',
+                  icon: const Icon(Icons.clear),
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+            if (selectedProducts.isEmpty)
+              const Text('Noch keine Artikel hinzugefügt.'),
+            for (final product in selectedProducts)
+              _ProductQuantityRow(
+                product: product,
+                quantity: quantities[product.id] ?? 1,
+                onChanged: (quantity) {
+                  setState(() => quantities[product.id] = quantity);
+                },
+                onRemove: () {
+                  setState(() => quantities.remove(product.id));
+                },
+              ),
           ],
         ),
       ),
@@ -75,35 +90,69 @@ class _BookingOrderDialogState extends State<BookingOrderDialog> {
           child: const Text('Abbrechen'),
         ),
         FilledButton(
-          onPressed: () {
-            final product = _selectedProduct;
-            if (product == null) {
-              return;
-            }
-            Navigator.pop(
-              context,
-              Order(
-                siteNumber: widget.siteNumber,
-                description: product.name,
-                quantity: quantity,
-                category: product.category,
-                productId: product.id,
-                unitPrice: product.unitPrice,
-              ),
-            );
-          },
+          onPressed: selectedProducts.isEmpty ? null : _save,
           child: const Text('Bestellung speichern'),
         ),
       ],
     );
   }
 
-  OrderProduct? get _selectedProduct {
-    for (final product in widget.products) {
-      if (product.id == productId) {
-        return product;
-      }
-    }
-    return null;
+  void _save() {
+    final orders = [
+      for (final product in widget.products)
+        if (quantities.containsKey(product.id))
+          Order(
+            siteNumber: widget.siteNumber,
+            bookingId: widget.bookingId,
+            description: product.name,
+            quantity: quantities[product.id] ?? 1,
+            category: product.category,
+            productId: product.id,
+            unitPrice: product.unitPrice,
+          ),
+    ];
+    Navigator.pop(context, orders);
+  }
+}
+
+class _ProductQuantityRow extends StatelessWidget {
+  const _ProductQuantityRow({
+    required this.product,
+    required this.quantity,
+    required this.onChanged,
+    required this.onRemove,
+  });
+
+  final OrderProduct product;
+  final int quantity;
+  final ValueChanged<int> onChanged;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(product.name),
+      subtitle: Text('${product.unitPrice.toStringAsFixed(2)} € pro Einheit'),
+      leading: IconButton(
+        onPressed: onRemove,
+        tooltip: 'Artikel entfernen',
+        icon: const Icon(Icons.remove_circle_outline),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            onPressed: quantity > 1 ? () => onChanged(quantity - 1) : null,
+            icon: const Icon(Icons.remove),
+          ),
+          Text('$quantity'),
+          IconButton(
+            onPressed: () => onChanged(quantity + 1),
+            icon: const Icon(Icons.add),
+          ),
+        ],
+      ),
+    );
   }
 }

@@ -15,12 +15,16 @@ String _formatInitialDate(DateTime date) {
 class BookingDialog extends StatefulWidget {
   const BookingDialog({
     required this.existingBookings,
+    required this.sites,
     this.initialBooking,
+    this.initialSiteNumber,
     super.key,
   });
 
   final List<Booking> existingBookings;
+  final List<CampSite> sites;
   final Booking? initialBooking;
+  final int? initialSiteNumber;
 
   @override
   State<BookingDialog> createState() => _BookingDialogState();
@@ -58,6 +62,13 @@ class _BookingDialogState extends State<BookingDialog> {
       dog = booking.hasDog;
       siteNumber = booking.siteNumber;
       vehicleType = booking.vehicleType;
+    } else if (widget.initialSiteNumber != null) {
+      siteNumber = widget.initialSiteNumber;
+      final selectedSite = widget.sites.firstWhere(
+        (site) => site.number == widget.initialSiteNumber,
+        orElse: () => widget.sites.first,
+      );
+      vehicleType = _vehicleTypeFor(selectedSite);
     }
   }
 
@@ -200,7 +211,15 @@ class _BookingDialogState extends State<BookingDialog> {
                 ],
                 onChanged: (value) {
                   if (value != null) {
-                    setState(() => vehicleType = value);
+                    setState(() {
+                      vehicleType = value;
+                      if (siteNumber != null &&
+                          !_availableSites.any(
+                            (site) => site.number == siteNumber,
+                          )) {
+                        siteNumber = null;
+                      }
+                    });
                   }
                 },
               ),
@@ -309,11 +328,27 @@ class _BookingDialogState extends State<BookingDialog> {
   }
 
   List<CampSite> get _availableSites {
-    return CampSite.samples
+    return widget.sites
         .where(
-          (site) => site.status == 'Frei' && _siteIsAvailable(site.number),
+          (site) =>
+              (site.status == 'Frei' || site.number == widget.initialSiteNumber) &&
+              site.supportsVehicleType(vehicleType) &&
+              _siteIsAvailable(site.number),
         )
         .toList();
+  }
+
+  VehicleType _vehicleTypeFor(CampSite site) {
+    switch (site.type) {
+      case 'Auto / Van':
+        return VehicleType.carVan;
+      case 'Zelt':
+        return VehicleType.tent;
+      case 'Auto mit Anhänger':
+        return VehicleType.carWithTrailer;
+      default:
+        return VehicleType.motorhome;
+    }
   }
 
   bool _siteIsAvailable(int number) {
@@ -330,7 +365,12 @@ class _BookingDialogState extends State<BookingDialog> {
       guests: guests,
       hasDog: dog,
       siteNumber: number,
+      vehicleType: vehicleType,
     );
+
+    if (departure.isBefore(arrival)) {
+      return false;
+    }
 
     return widget.existingBookings.every(
       (booking) => !draft.conflictsWith(booking),

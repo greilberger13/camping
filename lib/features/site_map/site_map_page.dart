@@ -1,21 +1,32 @@
 import 'package:flutter/material.dart';
 
+import '../../core/camping_dates.dart';
 import '../../models/booking.dart';
 import '../../models/camp_site.dart';
 import '../../shared/widgets/page_frame.dart';
 
+bool _bookingOccupiesToday(Booking booking) {
+  final arrival = booking.arrivalDate;
+  final departure = booking.departureDate;
+  final today = CampingDates.operationalDay;
+  if (arrival == null || departure == null) {
+    return false;
+  }
+  return !today.isBefore(arrival) && today.isBefore(departure);
+}
+
 class SiteMapPage extends StatefulWidget {
-  const SiteMapPage({required this.bookings, super.key});
+  const SiteMapPage({required this.bookings, required this.sites, required this.onSiteTap, super.key});
 
   final List<Booking> bookings;
+  final List<CampSite> sites;
+  final ValueChanged<int> onSiteTap;
 
   @override
   State<SiteMapPage> createState() => _SiteMapPageState();
 }
 
 class _SiteMapPageState extends State<SiteMapPage> {
-  final siteColors = <int, Color>{};
-
   @override
   Widget build(BuildContext context) {
     return PageFrame(
@@ -38,10 +49,8 @@ class _SiteMapPageState extends State<SiteMapPage> {
               padding: const EdgeInsets.all(20),
               child: _SitePlanImage(
                 bookings: widget.bookings,
-                siteColors: siteColors,
-                onColorChanged: (siteNumber, color) {
-                  setState(() => siteColors[siteNumber] = color);
-                },
+                sites: widget.sites,
+                onSiteTap: widget.onSiteTap,
               ),
             ),
           ),
@@ -54,13 +63,13 @@ class _SiteMapPageState extends State<SiteMapPage> {
 class _SitePlanImage extends StatelessWidget {
   const _SitePlanImage({
     required this.bookings,
-    required this.siteColors,
-    required this.onColorChanged,
+    required this.sites,
+    required this.onSiteTap,
   });
 
   final List<Booking> bookings;
-  final Map<int, Color> siteColors;
-  final void Function(int siteNumber, Color color) onColorChanged;
+  final List<CampSite> sites;
+  final ValueChanged<int> onSiteTap;
 
   @override
   Widget build(BuildContext context) {
@@ -86,21 +95,22 @@ class _SitePlanImage extends StatelessWidget {
                 errorBuilder: (context, error, stackTrace) {
                   return _SiteGrid(
                     bookings: bookings,
-                    siteColors: siteColors,
-                    onColorChanged: onColorChanged,
+                    sites: sites,
+                    onSiteTap: onSiteTap,
                   );
                 },
               ),
-              for (final site in CampSite.samples)
+              for (final site in sites)
                 _ImageSiteOverlay(
                   site: site,
                   booking: _bookingFor(site.number),
-                  color: siteColors[site.number] ?? site.color,
+                  color: site.color,
+                  disabled: _isDisabled(site, _bookingFor(site.number)),
                   position: _positionFor(site.number),
                   imageSize: imageSize,
                   horizontalOffset: horizontalOffset,
                   verticalOffset: verticalOffset,
-                  onColorChanged: onColorChanged,
+                  onSiteTap: onSiteTap,
                 ),
             ],
           ),
@@ -116,6 +126,13 @@ class _SitePlanImage extends StatelessWidget {
       }
     }
     return null;
+  }
+
+  bool _isDisabled(CampSite site, Booking? booking) {
+    if (booking != null && _bookingOccupiesToday(booking)) {
+      return true;
+    }
+    return site.status != 'Frei';
   }
 
   Offset _positionFor(int number) {
@@ -149,21 +166,23 @@ class _ImageSiteOverlay extends StatelessWidget {
     required this.site,
     required this.booking,
     required this.color,
+    required this.disabled,
     required this.position,
     required this.imageSize,
     required this.horizontalOffset,
     required this.verticalOffset,
-    required this.onColorChanged,
+    required this.onSiteTap,
   });
 
   final CampSite site;
   final Booking? booking;
   final Color color;
+  final bool disabled;
   final Offset position;
   final double imageSize;
   final double horizontalOffset;
   final double verticalOffset;
-  final void Function(int siteNumber, Color color) onColorChanged;
+  final ValueChanged<int> onSiteTap;
 
   @override
   Widget build(BuildContext context) {
@@ -181,20 +200,16 @@ class _ImageSiteOverlay extends StatelessWidget {
       width: 42,
       height: 34,
       child: InkWell(
-        onTap: () => showModalBottomSheet<void>(
-          context: context,
-          showDragHandle: true,
-          builder: (context) => _SiteDetails(
-            site: site,
-            booking: booking,
-            color: color,
-            onColorChanged: onColorChanged,
-          ),
-        ),
+        onTap: disabled ? null : () => onSiteTap(site.number),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.22),
-            border: Border.all(color: statusColor, width: 2),
+            color: disabled
+                ? const Color(0xffb8bec3).withValues(alpha: 0.6)
+                : color.withValues(alpha: 0.22),
+            border: Border.all(
+              color: disabled ? const Color(0xff777f86) : statusColor,
+              width: 2,
+            ),
             borderRadius: BorderRadius.circular(6),
           ),
           child: Center(
@@ -212,13 +227,13 @@ class _ImageSiteOverlay extends StatelessWidget {
 class _SiteGrid extends StatelessWidget {
   const _SiteGrid({
     required this.bookings,
-    required this.siteColors,
-    required this.onColorChanged,
+    required this.sites,
+    required this.onSiteTap,
   });
 
   final List<Booking> bookings;
-  final Map<int, Color> siteColors;
-  final void Function(int siteNumber, Color color) onColorChanged;
+  final List<CampSite> sites;
+  final ValueChanged<int> onSiteTap;
 
   @override
   Widget build(BuildContext context) {
@@ -230,12 +245,15 @@ class _SiteGrid extends StatelessWidget {
       crossAxisSpacing: 12,
       childAspectRatio: 1.35,
       children: [
-        for (final site in CampSite.samples)
-          _SiteTile(
+        for (final site in sites)
+                _SiteTile(
             site: site,
             booking: _bookingFor(site.number),
-            color: siteColors[site.number] ?? site.color,
-            onColorChanged: onColorChanged,
+            color: site.color,
+            disabled: site.status != 'Frei' ||
+              (_bookingFor(site.number) != null &&
+                    _bookingOccupiesToday(_bookingFor(site.number)!)),
+            onSiteTap: onSiteTap,
           ),
       ],
     );
@@ -256,31 +274,24 @@ class _SiteTile extends StatelessWidget {
     required this.site,
     required this.booking,
     required this.color,
-    required this.onColorChanged,
+    required this.disabled,
+    required this.onSiteTap,
   });
 
   final CampSite site;
   final Booking? booking;
   final Color color;
-  final void Function(int siteNumber, Color color) onColorChanged;
+  final bool disabled;
+  final ValueChanged<int> onSiteTap;
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () => showModalBottomSheet<void>(
-        context: context,
-        showDragHandle: true,
-        builder: (context) => _SiteDetails(
-          site: site,
-          booking: booking,
-          color: color,
-          onColorChanged: onColorChanged,
-        ),
-      ),
+      onTap: disabled ? null : () => onSiteTap(site.number),
       borderRadius: BorderRadius.circular(12),
       child: Ink(
         decoration: BoxDecoration(
-          color: color,
+          color: disabled ? const Color(0xffb8bec3) : color,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: _statusColor,
@@ -312,87 +323,6 @@ class _SiteTile extends StatelessWidget {
     }
     return const Color(0xff32866d);
   }
-}
-
-class _SiteDetails extends StatelessWidget {
-  const _SiteDetails({
-    required this.site,
-    required this.booking,
-    required this.color,
-    required this.onColorChanged,
-  });
-
-  final CampSite site;
-  final Booking? booking;
-  final Color color;
-  final void Function(int siteNumber, Color color) onColorChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 28),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Stellplatz ${site.number}',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-          ),
-          Text(
-            site.type,
-            style: const TextStyle(color: Color(0xff61716d)),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            booking == null
-                ? site.status
-                : '${booking!.guestName} · ${booking!.arrival} – ${booking!.departure}',
-          ),
-          if (booking != null)
-            Text(
-              '${booking!.guests} Personen${booking!.hasDog ? ' · Hund' : ''}',
-            ),
-          const SizedBox(height: 18),
-          const Text(
-            'Farbe des Stellplatzes',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 10,
-            children: [
-              for (final option in _siteColorOptions)
-                InkWell(
-                  onTap: () {
-                    onColorChanged(site.number, option);
-                    Navigator.pop(context);
-                  },
-                  borderRadius: BorderRadius.circular(20),
-                  child: CircleAvatar(
-                    radius: 16,
-                    backgroundColor: option,
-                    child: option == color
-                        ? const Icon(Icons.check, color: Colors.black54)
-                        : null,
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  static const _siteColorOptions = [
-    Color(0xffa9ed21),
-    Color(0xff22d9ed),
-    Color(0xffffbd21),
-    Color(0xffff6ba8),
-    Color(0xffd7dce2),
-  ];
 }
 
 class _Legend extends StatelessWidget {

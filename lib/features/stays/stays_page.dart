@@ -18,7 +18,7 @@ class StaysPage extends StatefulWidget {
     required this.orders,
     required this.products,
     required this.electricityBySite,
-    required this.onOrderAdded,
+    required this.onOrdersAdded,
     required this.onOrderUpdated,
     required this.onProductAdded,
     required this.onProductUpdated,
@@ -34,7 +34,7 @@ class StaysPage extends StatefulWidget {
   final List<Order> orders;
   final List<OrderProduct> products;
   final Map<int, bool> electricityBySite;
-  final ValueChanged<Order> onOrderAdded;
+  final ValueChanged<List<Order>> onOrdersAdded;
   final ValueChanged<Order> onOrderUpdated;
   final ValueChanged<OrderProduct> onProductAdded;
   final ValueChanged<OrderProduct> onProductUpdated;
@@ -67,7 +67,7 @@ class _StaysPageState extends State<StaysPage> {
               onElectricityChanged: (value) {
                 widget.onElectricityChanged(booking.siteNumber, value);
               },
-              onOrder: () => _addOrder(booking.siteNumber),
+              onOrder: () => _addOrder(booking),
               onGuestLink: () => _showGuestLink(booking.siteNumber),
             ),
           const SizedBox(height: 28),
@@ -135,17 +135,18 @@ class _StaysPageState extends State<StaysPage> {
     );
   }
 
-  Future<void> _addOrder(int siteNumber) async {
-    final order = await showDialog<Order>(
+  Future<void> _addOrder(Booking booking) async {
+    final orders = await showDialog<List<Order>>(
       context: context,
       builder: (context) => BookingOrderDialog(
-        siteNumber: siteNumber,
+        siteNumber: booking.siteNumber,
+        bookingId: booking.id,
         products: widget.products,
       ),
     );
 
-    if (order != null) {
-      widget.onOrderAdded(order);
+    if (orders != null) {
+      widget.onOrdersAdded(orders);
     }
   }
 

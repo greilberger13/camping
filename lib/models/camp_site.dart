@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'vehicle_type.dart';
+
 class CampSite {
   const CampSite(this.number, this.type, this.status, this.color, {this.guest});
 
@@ -8,6 +10,35 @@ class CampSite {
   final String status;
   final Color color;
   final String? guest;
+
+  CampSite copyWith({String? status, String? guest}) {
+    return CampSite(
+      number,
+      type,
+      status ?? this.status,
+      color,
+      guest: guest ?? this.guest,
+    );
+  }
+
+  bool supportsVehicleType(VehicleType vehicleType) {
+    switch (type) {
+      case 'Wohnmobil':
+        return vehicleType == VehicleType.motorhome ||
+            vehicleType == VehicleType.other;
+      case 'Auto / Van':
+        return vehicleType == VehicleType.carVan ||
+            vehicleType == VehicleType.other;
+      case 'Zelt':
+        return vehicleType == VehicleType.tent ||
+            vehicleType == VehicleType.other;
+      case 'Auto mit Anhänger':
+        return vehicleType == VehicleType.carWithTrailer ||
+            vehicleType == VehicleType.other;
+      default:
+        return vehicleType == VehicleType.other;
+    }
+  }
 
   static const samples = [
     CampSite(1, 'Wohnmobil', 'Belegt', Color(0xffa9ed21), guest: 'Familie Huber · bis 14.06.'),

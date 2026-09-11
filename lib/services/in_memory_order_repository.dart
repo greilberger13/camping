@@ -7,7 +7,12 @@ class InMemoryOrderRepository implements OrderRepository {
     List<OrderProduct> initialProducts = const [],
     List<Order> initialOrders = const [],
   })  : _products = List<OrderProduct>.of(initialProducts),
-        _orders = List<Order>.of(initialOrders);
+        _orders = [
+          for (var index = 0; index < initialOrders.length; index++)
+            initialOrders[index].id == null
+                ? initialOrders[index].copyWith(id: 'seed-order-$index')
+                : initialOrders[index],
+        ];
 
   final List<OrderProduct> _products;
   final List<Order> _orders;

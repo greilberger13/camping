@@ -12,6 +12,7 @@ enum OrderStatus {
 class Order {
   const Order({
     this.id,
+    this.bookingId,
     required this.siteNumber,
     required this.description,
     required this.quantity,
@@ -22,6 +23,7 @@ class Order {
   });
 
   final String? id;
+  final String? bookingId;
   final int siteNumber;
   final String description;
   final int quantity;
@@ -33,6 +35,7 @@ class Order {
   Order copyWith({String? id, OrderStatus? status}) {
     return Order(
       id: id ?? this.id,
+      bookingId: bookingId ?? this.bookingId,
       siteNumber: siteNumber,
       description: description,
       quantity: quantity,
