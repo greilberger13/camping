@@ -11,6 +11,7 @@ enum OrderStatus {
 
 class Order {
   const Order({
+    this.id,
     required this.siteNumber,
     required this.description,
     required this.quantity,
@@ -20,6 +21,7 @@ class Order {
     this.status = OrderStatus.open,
   });
 
+  final String? id;
   final int siteNumber;
   final String description;
   final int quantity;
@@ -28,8 +30,9 @@ class Order {
   final double? unitPrice;
   final OrderStatus status;
 
-  Order copyWith({OrderStatus? status}) {
+  Order copyWith({String? id, OrderStatus? status}) {
     return Order(
+      id: id ?? this.id,
       siteNumber: siteNumber,
       description: description,
       quantity: quantity,

@@ -1,9 +1,22 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../../core/supabase_config.dart';
+import '../../core/supabase_database.dart';
 import '../../models/booking.dart';
 import '../../models/order.dart';
 import '../../models/order_product.dart';
 import '../../models/stay_note.dart';
+import '../../services/booking_repository.dart';
+import '../../services/supabase_booking_repository.dart';
+import '../../services/in_memory_booking_repository.dart';
+import '../../services/in_memory_order_repository.dart';
+import '../../services/order_repository.dart';
+import '../../services/supabase_order_repository.dart';
+import '../../services/in_memory_stay_note_repository.dart';
+import '../../services/stay_note_repository.dart';
+import '../../services/supabase_stay_note_repository.dart';
 import '../bookings/booking_dialog.dart';
 import '../bookings/bookings_page.dart';
 import '../calendar/calendar_page.dart';
@@ -23,43 +36,60 @@ class CampingHomePage extends StatefulWidget {
 
 class _CampingHomePageState extends State<CampingHomePage> {
   int selected = 0;
-  final List<Booking> newBookings = [];
-  final List<Order> orders = [
-    const Order(
-      siteNumber: 5,
-      description: '5 Semmeln',
-      quantity: 1,
-      category: OrderCategory.bakery,
-    ),
-    const Order(
-      siteNumber: 22,
-      description: 'Kärntnernudel und Bier',
-      quantity: 1,
-      category: OrderCategory.foodAndDrinks,
-    ),
-  ];
-  final List<OrderProduct> products = [
-    const OrderProduct(
-      id: 'semmel',
-      name: 'Semmel',
-      category: OrderCategory.bakery,
-      unitPrice: 0.5,
-    ),
-    const OrderProduct(
-      id: 'kornspitz',
-      name: 'Kornspitz',
-      category: OrderCategory.bakery,
-      unitPrice: 0.8,
-    ),
-    const OrderProduct(
-      id: 'bier',
-      name: 'Bier',
-      category: OrderCategory.foodAndDrinks,
-      unitPrice: 3.5,
-    ),
-  ];
+  late BookingRepository bookingRepository;
+  late OrderRepository orderRepository;
+  final localOrderRepository = InMemoryOrderRepository(
+    initialOrders: const [
+      Order(
+        siteNumber: 5,
+        description: '5 Semmeln',
+        quantity: 1,
+        category: OrderCategory.bakery,
+      ),
+      Order(
+        siteNumber: 22,
+        description: 'Kärntnernudel und Bier',
+        quantity: 1,
+        category: OrderCategory.foodAndDrinks,
+      ),
+    ],
+    initialProducts: const [
+      OrderProduct(
+        id: 'semmel',
+        name: 'Semmel',
+        category: OrderCategory.bakery,
+        unitPrice: 0.5,
+      ),
+      OrderProduct(
+        id: 'kornspitz',
+        name: 'Kornspitz',
+        category: OrderCategory.bakery,
+        unitPrice: 0.8,
+      ),
+      OrderProduct(
+        id: 'bier',
+        name: 'Bier',
+        category: OrderCategory.foodAndDrinks,
+        unitPrice: 3.5,
+      ),
+    ],
+  );
   final Map<int, bool> electricityBySite = {5: true, 22: false};
-  final List<StayNote> notes = [];
+  late StayNoteRepository noteRepository;
+
+  List<Booking> get newBookings => bookingRepository.current;
+  List<Order> get orders => orderRepository.orders;
+  List<OrderProduct> get products => orderRepository.products;
+  List<StayNote> get notes => noteRepository.notes;
+
+  @override
+  void initState() {
+    super.initState();
+    bookingRepository = InMemoryBookingRepository();
+    orderRepository = localOrderRepository;
+    noteRepository = InMemoryStayNoteRepository();
+    unawaited(_initializeRemoteRepositories());
+  }
 
   static const nav = [
     ('Heute', Icons.today_outlined),
@@ -166,7 +196,7 @@ class _CampingHomePageState extends State<CampingHomePage> {
         return BookingsPage(
           bookings: newBookings,
           onDelete: (booking) {
-            setState(() => newBookings.remove(booking));
+            unawaited(_deleteBooking(booking));
           },
           onEdit: _editBooking,
         );
@@ -178,39 +208,14 @@ class _CampingHomePageState extends State<CampingHomePage> {
           orders: orders,
           products: products,
           electricityBySite: electricityBySite,
-          onOrderAdded: (order) => setState(() => orders.add(order)),
-          onOrderUpdated: (updatedOrder) {
-            setState(() {
-              final index = orders.indexWhere(
-                (order) =>
-                    order.siteNumber == updatedOrder.siteNumber &&
-                    order.description == updatedOrder.description &&
-                    order.productId == updatedOrder.productId,
-              );
-              if (index != -1) {
-                orders[index] = updatedOrder;
-              }
-            });
-          },
-          onProductAdded: (product) => setState(() => products.add(product)),
-          onProductUpdated: (updatedProduct) {
-            setState(() {
-              final index = products.indexWhere(
-                (product) => product.id == updatedProduct.id,
-              );
-              if (index != -1) {
-                products[index] = updatedProduct;
-              }
-            });
-          },
-          onProductDeleted: (productId) {
-            setState(() {
-              products.removeWhere((product) => product.id == productId);
-            });
-          },
+          onOrderAdded: (order) => unawaited(_addOrder(order)),
+          onOrderUpdated: (order) => unawaited(_updateOrder(order)),
+          onProductAdded: (product) => unawaited(_addProduct(product)),
+          onProductUpdated: (product) => unawaited(_updateProduct(product)),
+          onProductDeleted: (productId) => unawaited(_deleteProduct(productId)),
           notes: notes,
-          onNoteAdded: (note) => setState(() => notes.add(note)),
-          onNoteDeleted: (note) => setState(() => notes.remove(note)),
+          onNoteAdded: (note) => unawaited(_addNote(note)),
+          onNoteDeleted: (note) => unawaited(_deleteNote(note)),
           onElectricityChanged: (siteNumber, enabled) {
             setState(() => electricityBySite[siteNumber] = enabled);
           },
@@ -247,7 +252,40 @@ class _CampingHomePageState extends State<CampingHomePage> {
     );
 
     if (booking != null) {
-      setState(() => newBookings.add(booking));
+      await bookingRepository.create(booking);
+      setState(() {});
+    }
+  }
+
+  Future<void> _initializeRemoteRepositories() async {
+    final config = SupabaseConfig.fromEnvironment();
+    if (!config.isConfigured) {
+      return;
+    }
+
+    try {
+      final database = await SupabaseDatabase.connect(config: config);
+      if (database == null) {
+        return;
+      }
+
+      final bookingRepository = SupabaseBookingRepository(database);
+      final orderRepository = SupabaseOrderRepository(database);
+      final noteRepository = SupabaseStayNoteRepository(database);
+      await bookingRepository.load();
+      await orderRepository.loadProducts();
+      await orderRepository.loadOrders();
+      await noteRepository.load();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        this.bookingRepository = bookingRepository;
+        this.orderRepository = orderRepository;
+        this.noteRepository = noteRepository;
+      });
+    } catch (_) {
+      // Keep the local fallback when the remote database is not reachable.
     }
   }
 
@@ -267,11 +305,49 @@ class _CampingHomePageState extends State<CampingHomePage> {
       return;
     }
 
-    setState(() {
-      final index = newBookings.indexOf(booking);
-      if (index != -1) {
-        newBookings[index] = updatedBooking;
-      }
-    });
+    await bookingRepository.update(updatedBooking.copyWith(id: booking.id));
+    setState(() {});
+  }
+
+  Future<void> _deleteBooking(Booking booking) async {
+    await bookingRepository.delete(booking);
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _addNote(StayNote note) async {
+    await noteRepository.create(note);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _deleteNote(StayNote note) async {
+    await noteRepository.delete(note);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _addOrder(Order order) async {
+    await orderRepository.createOrder(order);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _updateOrder(Order order) async {
+    await orderRepository.updateOrder(order);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _addProduct(OrderProduct product) async {
+    await orderRepository.createProduct(product);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _updateProduct(OrderProduct product) async {
+    await orderRepository.updateProduct(product);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _deleteProduct(String productId) async {
+    await orderRepository.deleteProduct(productId);
+    if (mounted) setState(() {});
   }
 }

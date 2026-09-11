@@ -36,7 +36,7 @@ class _SiteMapPageState extends State<SiteMapPage> {
           Card(
             child: Padding(
               padding: const EdgeInsets.all(20),
-              child: _SiteGrid(
+              child: _SitePlanImage(
                 bookings: widget.bookings,
                 siteColors: siteColors,
                 onColorChanged: (siteNumber, color) {
@@ -46,6 +46,164 @@ class _SiteMapPageState extends State<SiteMapPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SitePlanImage extends StatelessWidget {
+  const _SitePlanImage({
+    required this.bookings,
+    required this.siteColors,
+    required this.onColorChanged,
+  });
+
+  final List<Booking> bookings;
+  final Map<int, Color> siteColors;
+  final void Function(int siteNumber, Color color) onColorChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth;
+        final availableHeight = constraints.maxHeight.isFinite
+            ? constraints.maxHeight
+            : availableWidth;
+        final imageSize = availableWidth < availableHeight
+            ? availableWidth
+            : availableHeight;
+        final horizontalOffset = (availableWidth - imageSize) / 2;
+        final verticalOffset = (availableHeight - imageSize) / 2;
+        return AspectRatio(
+          aspectRatio: 1,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.asset(
+                'assets/Lageplan.jpg',
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) {
+                  return _SiteGrid(
+                    bookings: bookings,
+                    siteColors: siteColors,
+                    onColorChanged: onColorChanged,
+                  );
+                },
+              ),
+              for (final site in CampSite.samples)
+                _ImageSiteOverlay(
+                  site: site,
+                  booking: _bookingFor(site.number),
+                  color: siteColors[site.number] ?? site.color,
+                  position: _positionFor(site.number),
+                  imageSize: imageSize,
+                  horizontalOffset: horizontalOffset,
+                  verticalOffset: verticalOffset,
+                  onColorChanged: onColorChanged,
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Booking? _bookingFor(int siteNumber) {
+    for (final booking in bookings) {
+      if (booking.siteNumber == siteNumber) {
+        return booking;
+      }
+    }
+    return null;
+  }
+
+  Offset _positionFor(int number) {
+    if (number >= 18 && number <= 23) {
+      return Offset(0.13 + (number - 18) * 0.085, 0.08 + (number - 18) * 0.075);
+    }
+    if (number >= 9 && number <= 16) {
+      return Offset(0.34 + (number - 9) * 0.075, 0.62 + (number - 9) * 0.045);
+    }
+    if (number >= 1 && number <= 5) {
+      return Offset(0.55 + (5 - number) * 0.075, 0.60 - (5 - number) * 0.045);
+    }
+    if (number == 6 || number == 7) {
+      return Offset(0.78, 0.73 + (number - 6) * 0.08);
+    }
+    if (number == 8) {
+      return const Offset(0.69, 0.85);
+    }
+    if (number == 17) {
+      return const Offset(0.05, 0.45);
+    }
+    if (number >= 24 && number <= 26) {
+      return Offset(0.48 + (number - 24) * 0.08, 0.30 + (number - 24) * 0.08);
+    }
+    return const Offset(0.5, 0.5);
+  }
+}
+
+class _ImageSiteOverlay extends StatelessWidget {
+  const _ImageSiteOverlay({
+    required this.site,
+    required this.booking,
+    required this.color,
+    required this.position,
+    required this.imageSize,
+    required this.horizontalOffset,
+    required this.verticalOffset,
+    required this.onColorChanged,
+  });
+
+  final CampSite site;
+  final Booking? booking;
+  final Color color;
+  final Offset position;
+  final double imageSize;
+  final double horizontalOffset;
+  final double verticalOffset;
+  final void Function(int siteNumber, Color color) onColorChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final statusColor = booking != null
+        ? const Color(0xffd69b32)
+        : site.status == 'Belegt'
+            ? const Color(0xffc65b54)
+            : site.status == 'Reserviert'
+                ? const Color(0xffd69b32)
+                : const Color(0xff32866d);
+
+    return Positioned(
+      left: horizontalOffset + position.dx * imageSize,
+      top: verticalOffset + position.dy * imageSize,
+      width: 42,
+      height: 34,
+      child: InkWell(
+        onTap: () => showModalBottomSheet<void>(
+          context: context,
+          showDragHandle: true,
+          builder: (context) => _SiteDetails(
+            site: site,
+            booking: booking,
+            color: color,
+            onColorChanged: onColorChanged,
+          ),
+        ),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.22),
+            border: Border.all(color: statusColor, width: 2),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Center(
+            child: Text(
+              '${site.number}',
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+        ),
       ),
     );
   }

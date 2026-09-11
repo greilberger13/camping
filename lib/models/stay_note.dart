@@ -6,14 +6,25 @@ enum StayNoteCategory {
 
 class StayNote {
   const StayNote({
+    this.id,
     required this.siteNumber,
     required this.text,
     required this.category,
   });
 
+  final String? id;
   final int siteNumber;
   final String text;
   final StayNoteCategory category;
+
+  StayNote copyWith({String? id}) {
+    return StayNote(
+      id: id ?? this.id,
+      siteNumber: siteNumber,
+      text: text,
+      category: category,
+    );
+  }
 
   String get categoryLabel {
     switch (category) {

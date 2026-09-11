@@ -2,6 +2,7 @@ import 'vehicle_type.dart';
 
 class Booking {
   const Booking({
+    this.id,
     required this.guestName,
     required this.arrival,
     required this.departure,
@@ -14,6 +15,7 @@ class Booking {
     this.phone,
   });
 
+  final String? id;
   final String guestName;
   final String arrival;
   final String departure;
@@ -24,6 +26,22 @@ class Booking {
   final String? address;
   final String? birthDate;
   final String? phone;
+
+  Booking copyWith({String? id}) {
+    return Booking(
+      id: id ?? this.id,
+      guestName: guestName,
+      arrival: arrival,
+      departure: departure,
+      guests: guests,
+      hasDog: hasDog,
+      siteNumber: siteNumber,
+      vehicleType: vehicleType,
+      address: address,
+      birthDate: birthDate,
+      phone: phone,
+    );
+  }
 
   DateTime? get arrivalDate => _parseDate(arrival);
 
