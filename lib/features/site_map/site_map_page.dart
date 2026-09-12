@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/camping_dates.dart';
 import '../../models/booking.dart';
 import '../../models/camp_site.dart';
+import '../../models/site_plan_anchor.dart';
 import '../../shared/widgets/page_frame.dart';
 
 bool _bookingOccupiesToday(Booking booking) {
@@ -41,6 +42,7 @@ class _SiteMapPageState extends State<SiteMapPage> {
               _Legend(Color(0xff32866d), 'Frei'),
               _Legend(Color(0xffd69b32), 'Reserviert'),
               _Legend(Color(0xffc65b54), 'Belegt'),
+              _Legend(Color(0xff777f86), 'Gesperrt'),
             ],
           ),
           const SizedBox(height: 20),
@@ -132,30 +134,14 @@ class _SitePlanImage extends StatelessWidget {
     if (booking != null && _bookingOccupiesToday(booking)) {
       return true;
     }
-    return site.status != 'Frei';
+    return site.status == 'Belegt' || site.status == 'Gesperrt';
   }
 
   Offset _positionFor(int number) {
-    if (number >= 18 && number <= 23) {
-      return Offset(0.13 + (number - 18) * 0.085, 0.08 + (number - 18) * 0.075);
-    }
-    if (number >= 9 && number <= 16) {
-      return Offset(0.34 + (number - 9) * 0.075, 0.62 + (number - 9) * 0.045);
-    }
-    if (number >= 1 && number <= 5) {
-      return Offset(0.55 + (5 - number) * 0.075, 0.60 - (5 - number) * 0.045);
-    }
-    if (number == 6 || number == 7) {
-      return Offset(0.78, 0.73 + (number - 6) * 0.08);
-    }
-    if (number == 8) {
-      return const Offset(0.69, 0.85);
-    }
-    if (number == 17) {
-      return const Offset(0.05, 0.45);
-    }
-    if (number >= 24 && number <= 26) {
-      return Offset(0.48 + (number - 24) * 0.08, 0.30 + (number - 24) * 0.08);
+    for (final anchor in SitePlanAnchor.defaults) {
+      if (anchor.siteNumber == number) {
+        return anchor.position;
+      }
     }
     return const Offset(0.5, 0.5);
   }
@@ -190,8 +176,10 @@ class _ImageSiteOverlay extends StatelessWidget {
         ? const Color(0xffd69b32)
         : site.status == 'Belegt'
             ? const Color(0xffc65b54)
-            : site.status == 'Reserviert'
+                : site.status == 'Reserviert'
                 ? const Color(0xffd69b32)
+                : site.status == 'Gesperrt'
+                ? const Color(0xff777f86)
                 : const Color(0xff32866d);
 
     return Positioned(
@@ -250,7 +238,8 @@ class _SiteGrid extends StatelessWidget {
             site: site,
             booking: _bookingFor(site.number),
             color: site.color,
-            disabled: site.status != 'Frei' ||
+            disabled: site.status == 'Belegt' ||
+              site.status == 'Gesperrt' ||
               (_bookingFor(site.number) != null &&
                     _bookingOccupiesToday(_bookingFor(site.number)!)),
             onSiteTap: onSiteTap,
@@ -320,6 +309,9 @@ class _SiteTile extends StatelessWidget {
     }
     if (site.status == 'Reserviert') {
       return const Color(0xffd69b32);
+    }
+    if (site.status == 'Gesperrt') {
+      return const Color(0xff777f86);
     }
     return const Color(0xff32866d);
   }

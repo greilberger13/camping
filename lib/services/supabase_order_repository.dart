@@ -1,5 +1,6 @@
 import '../core/supabase_database.dart';
 import '../models/order.dart';
+import '../models/order_batch.dart';
 import '../models/order_product.dart';
 import 'order_repository.dart';
 
@@ -86,6 +87,15 @@ class SupabaseOrderRepository implements OrderRepository {
         .single();
     final stored = _orderFromRow(row);
     orderCache.add(stored);
+    return stored;
+  }
+
+  @override
+  Future<List<Order>> createOrderBatch(OrderBatch batch) async {
+    final stored = <Order>[];
+    for (final item in batch.items) {
+      stored.add(await createOrder(item));
+    }
     return stored;
   }
 

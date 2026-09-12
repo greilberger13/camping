@@ -1,4 +1,5 @@
 import '../models/order.dart';
+import '../models/order_batch.dart';
 import '../models/order_product.dart';
 
 abstract interface class OrderRepository {
@@ -11,5 +12,6 @@ abstract interface class OrderRepository {
   Future<OrderProduct> updateProduct(OrderProduct product);
   Future<void> deleteProduct(String productId);
   Future<Order> createOrder(Order order);
+  Future<List<Order>> createOrderBatch(OrderBatch batch);
   Future<Order> updateOrder(Order order);
 }

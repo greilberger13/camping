@@ -5,6 +5,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../models/booking.dart';
 import '../../models/guest_order_link.dart';
 import '../../models/order.dart';
+import '../../models/order_batch.dart';
 import '../../models/order_product.dart';
 import '../../models/stay_note.dart';
 import '../../shared/widgets/page_frame.dart';
@@ -18,7 +19,7 @@ class StaysPage extends StatefulWidget {
     required this.orders,
     required this.products,
     required this.electricityBySite,
-    required this.onOrdersAdded,
+    required this.onOrderBatchAdded,
     required this.onOrderUpdated,
     required this.onProductAdded,
     required this.onProductUpdated,
@@ -34,7 +35,7 @@ class StaysPage extends StatefulWidget {
   final List<Order> orders;
   final List<OrderProduct> products;
   final Map<int, bool> electricityBySite;
-  final ValueChanged<List<Order>> onOrdersAdded;
+  final ValueChanged<OrderBatch> onOrderBatchAdded;
   final ValueChanged<Order> onOrderUpdated;
   final ValueChanged<OrderProduct> onProductAdded;
   final ValueChanged<OrderProduct> onProductUpdated;
@@ -136,7 +137,7 @@ class _StaysPageState extends State<StaysPage> {
   }
 
   Future<void> _addOrder(Booking booking) async {
-    final orders = await showDialog<List<Order>>(
+    final orderBatch = await showDialog<OrderBatch>(
       context: context,
       builder: (context) => BookingOrderDialog(
         siteNumber: booking.siteNumber,
@@ -145,8 +146,8 @@ class _StaysPageState extends State<StaysPage> {
       ),
     );
 
-    if (orders != null) {
-      widget.onOrdersAdded(orders);
+    if (orderBatch != null) {
+      widget.onOrderBatchAdded(orderBatch);
     }
   }
 

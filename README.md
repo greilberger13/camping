@@ -55,7 +55,8 @@ Standard-Abreise und Kalenderwochenstart verwaltet.
 ## Gemeinsame Datenbank
 
 Die Zielarchitektur verwendet Supabase als gemeinsame PostgreSQL-Datenbank.
-Es gibt keine sichtbare Login-Seite; die App startet direkt im Dashboard.
+Es gibt keine sichtbare Login-Seite; die App startet direkt im Dashboard und
+erzeugt intern eine Supabase-Anonymous-Session.
 Die Projekt-URL und der anon key werden zur Laufzeit ueber Dart-Defines
 bereitgestellt und nicht im Repository gespeichert.
 
@@ -65,25 +66,42 @@ Beispiel fuer einen lokalen Start mit aktivierter Datenbank:
 flutter run --dart-define=SUPABASE_URL=https://<projekt>.supabase.co --dart-define=SUPABASE_ANON_KEY=<anon-key>
 ```
 
+### Supabase-Ersteinrichtung
+
+1. Neues Supabase-Projekt erstellen.
+2. Unter Authentication den Provider `Anonymous Sign-Ins` aktivieren.
+3. Den kompletten Inhalt von `supabase/schema.sql` im SQL Editor ausfuehren.
+4. Projekt-URL und anon key aus den Supabase Project Settings verwenden.
+5. App mit den beiden Dart-Defines starten.
+6. Eine Buchung anlegen und anschliessend auf einem zweiten Geraet pruefen,
+   ob dieselbe Buchung geladen wird.
+
+Der Service Role Key darf niemals in die Flutter-App oder in ein Repository
+eingecheckt werden. In der App wird nur der oeffentliche anon key verwendet;
+der Zugriff wird ueber Anonymous Auth und Row-Level Security begrenzt.
+
 Ohne diese Defines bleibt die App im lokalen Beispieldatenmodus. Mit den
 Defines versucht die App beim Start, Buchungen über Supabase zu laden; bei
 fehlender Verbindung bleibt der lokale Fallback aktiv.
-
-Die erste Migration liegt unter
-`supabase/migrations/202609110001_initial_schema.sql`. Sie legt Stellplaetze,
-Buchungen, Artikel, Bestellungen, Notizen, Termine und Rechnungen an und
-aktiviert Row Level Security. Es werden absichtlich noch keine offenen anon-
-Schreibrechte vergeben. Fuer den Betrieb ohne sichtbare Anmeldung wird ein
-geschuetzter Server- oder Edge-Function-Zugriff benoetigt.
 
 Die Repository-Schicht liegt unter `lib/services/`. Fuer Buchungen, Artikel,
 Bestellungen, Aufenthaltsnotizen, Stellplaetze, Kalendertermine und Aufgaben
 gibt es lokale In-Memory-Fallbacks sowie Supabase-Implementierungen.
 
-Die zweite Migration
-`supabase/migrations/202609110002_order_groups_and_tasks.sql` bereitet
-Sammelbestellungen mit mehreren Positionen sowie idempotente Aufgaben aus
-Bestellpositionen vor.
+Sammelbestellungen werden im UI als `OrderBatch` mit mehreren Positionen
+modelliert. Die aktuelle Repository-Kompatibilität speichert die Positionen
+noch als einzelne `orders`-Zeilen; die Tabellen `order_groups` und
+`order_items` sind fuer die naechste Supabase-Migrationsstufe vorbereitet.
+
+Fuer ein neues Supabase-Projekt wird nur die zusammengefuehrte Datei
+`supabase/schema.sql` im SQL Editor ausgefuehrt. Sie enthaelt Tabellen,
+Stellplatz-Seed, Trigger, Doppelbuchungsschutz, Row-Level-Security und Policies
+fuer Anonymous-Sessions.
+
+Die Dateien unter `supabase/migrations/` bleiben als Entwicklungshistorie
+erhalten. Sie muessen bei einer komplett neuen Datenbank nicht zusaetzlich
+ausgefuehrt werden. Im Supabase-Dashboard muss Anonymous Sign-In aktiviert
+werden; die App zeigt dabei keine Anmeldung an.
 
 Der Lageplan liegt unter `assets/Lageplan.jpg` und ist in `pubspec.yaml` als
 Flutter-Asset registriert. Die Stellplatznummern werden als anklickbare

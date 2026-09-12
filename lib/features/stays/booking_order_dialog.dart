@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/order.dart';
+import '../../models/order_batch.dart';
 import '../../models/order_product.dart';
 
 class BookingOrderDialog extends StatefulWidget {
@@ -111,7 +112,14 @@ class _BookingOrderDialogState extends State<BookingOrderDialog> {
             unitPrice: product.unitPrice,
           ),
     ];
-    Navigator.pop(context, orders);
+    Navigator.pop(
+      context,
+      OrderBatch(
+        siteNumber: widget.siteNumber,
+        bookingId: widget.bookingId,
+        items: orders,
+      ),
+    );
   }
 }
 

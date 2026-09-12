@@ -7,6 +7,7 @@ import '../../core/supabase_database.dart';
 import '../../models/booking.dart';
 import '../../models/calendar_event.dart';
 import '../../models/order.dart';
+import '../../models/order_batch.dart';
 import '../../models/order_product.dart';
 import '../../models/stay_note.dart';
 import '../../models/task.dart';
@@ -254,7 +255,7 @@ class _CampingHomePageState extends State<CampingHomePage> {
           orders: orders,
           products: products,
           electricityBySite: electricityBySite,
-          onOrdersAdded: (orders) => unawaited(_addOrders(orders)),
+          onOrderBatchAdded: (batch) => unawaited(_addOrderBatch(batch)),
           onOrderUpdated: (order) => unawaited(_updateOrder(order)),
           onProductAdded: (product) => unawaited(_addProduct(product)),
           onProductUpdated: (product) => unawaited(_updateProduct(product)),
@@ -375,6 +376,7 @@ class _CampingHomePageState extends State<CampingHomePage> {
       context: context,
       builder: (context) => BookingDialog(
         existingBookings: editableBookings,
+        sites: siteRepository.sites,
         initialBooking: booking,
       ),
     );
@@ -404,10 +406,8 @@ class _CampingHomePageState extends State<CampingHomePage> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _addOrders(List<Order> orders) async {
-    for (final order in orders) {
-      await orderRepository.createOrder(order);
-    }
+  Future<void> _addOrderBatch(OrderBatch batch) async {
+    await orderRepository.createOrderBatch(batch);
     if (mounted) setState(() {});
   }
 
