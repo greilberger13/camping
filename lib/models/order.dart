@@ -35,7 +35,7 @@ class Order {
   Order copyWith({String? id, OrderStatus? status}) {
     return Order(
       id: id ?? this.id,
-      bookingId: bookingId ?? this.bookingId,
+      bookingId: bookingId ?? bookingId,
       siteNumber: siteNumber,
       description: description,
       quantity: quantity,

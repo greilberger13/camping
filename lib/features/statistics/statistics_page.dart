@@ -40,7 +40,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
 
     return PageFrame(
       title: 'Statistik',
-      subtitle: '${_periodLabel} · Auslastung und Gäste',
+      subtitle: '$_periodLabel · Auslastung und Gäste',
       child: Column(
         children: [
           Align(
