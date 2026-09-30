@@ -28,6 +28,7 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  final formKey = GlobalKey<FormState>();
   final siteController = TextEditingController();
   final adultController = TextEditingController();
   final childController = TextEditingController();
@@ -62,24 +63,14 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _save() async {
+    if (!formKey.currentState!.validate()) return;
     double? value(TextEditingController controller) =>
         double.tryParse(controller.text.trim().replaceAll(',', '.'));
-    final site = value(siteController);
-    final adult = value(adultController);
-    final child = value(childController);
-    if (site == null || adult == null || child == null) {
-      _message('Bitte gültige Preise eingeben.');
-      return;
-    }
     final pricing = Pricing(
-      sitePerNight: site,
-      adultPerStay: adult,
-      childPerStay: child,
+      sitePerNight: value(siteController)!,
+      adultPerStay: value(adultController)!,
+      childPerStay: value(childController)!,
     );
-    if (!pricing.isValid) {
-      _message('Preise dürfen nicht negativ sein.');
-      return;
-    }
     setState(() => saving = true);
     try {
       await widget.onSavePricing(pricing);
@@ -147,14 +138,18 @@ class _SettingsPageState extends State<SettingsPage> {
           children: [
             Text('Tarife', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                _priceField('Stellplatz pro Nacht', siteController),
-                _priceField('Erwachsene pro Aufenthalt', adultController),
-                _priceField('Kinder pro Aufenthalt', childController),
-              ],
+            Form(
+              key: formKey,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  _priceField('Stellplatz pro Nacht', siteController),
+                  _priceField('Erwachsene pro Aufenthalt', adultController),
+                  _priceField('Kinder pro Aufenthalt', childController),
+                ],
+              ),
             ),
             const SizedBox(height: 12),
             FilledButton.icon(
@@ -205,10 +200,20 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _priceField(String label, TextEditingController controller) =>
       SizedBox(
         width: 230,
-        child: TextField(
+        child: TextFormField(
           controller: controller,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: InputDecoration(labelText: label, suffixText: '€'),
+          validator: (input) {
+            final value = double.tryParse(
+              (input ?? '').trim().replaceAll(',', '.'),
+            );
+            if (value == null || !value.isFinite) {
+              return 'Bitte eine gültige Zahl eingeben.';
+            }
+            if (value < 0) return 'Der Preis darf nicht negativ sein.';
+            return null;
+          },
         ),
       );
 }

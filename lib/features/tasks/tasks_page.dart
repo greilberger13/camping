@@ -114,6 +114,7 @@ class _TaskDialog extends StatefulWidget {
 }
 
 class _TaskDialogState extends State<_TaskDialog> {
+  final formKey = GlobalKey<FormState>();
   final titleController = TextEditingController();
   final quantityController = TextEditingController();
   TaskCategory category = TaskCategory.camping;
@@ -130,13 +131,19 @@ class _TaskDialogState extends State<_TaskDialog> {
     return AlertDialog(
       title: const Text('Neue Aufgabe'),
       content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
+        child: Form(
+          key: formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+            TextFormField(
               controller: titleController,
               autofocus: true,
               decoration: const InputDecoration(labelText: 'Aufgabe'),
+              validator: (value) => value == null || value.trim().isEmpty
+                  ? 'Bitte eine Aufgabe eingeben.'
+                  : null,
             ),
             const SizedBox(height: 12),
             TextField(
@@ -162,7 +169,8 @@ class _TaskDialogState extends State<_TaskDialog> {
                 }
               },
             ),
-          ],
+            ],
+          ),
         ),
       ),
       actions: [
@@ -172,14 +180,11 @@ class _TaskDialogState extends State<_TaskDialog> {
         ),
         FilledButton(
           onPressed: () {
-            final title = titleController.text.trim();
-            if (title.isEmpty) {
-              return;
-            }
+            if (!formKey.currentState!.validate()) return;
             Navigator.pop(
               context,
               CampingTask(
-                title: title,
+                title: titleController.text.trim(),
                 quantity: quantityController.text.trim(),
                 category: category,
               ),

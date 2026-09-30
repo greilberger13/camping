@@ -436,6 +436,7 @@ class _CalendarEventDialog extends StatefulWidget {
 }
 
 class _CalendarEventDialogState extends State<_CalendarEventDialog> {
+  final formKey = GlobalKey<FormState>();
   final titleController = TextEditingController();
   final dateController = TextEditingController(
     text: _formatCalendarDate(CampingDates.operationalDay),
@@ -478,13 +479,19 @@ class _CalendarEventDialogState extends State<_CalendarEventDialog> {
             ? 'Termin bearbeiten'
             : 'Ganze Terminserie bearbeiten'),
       content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
+        child: Form(
+          key: formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+            TextFormField(
               controller: titleController,
               autofocus: true,
               decoration: const InputDecoration(labelText: 'Titel'),
+              validator: (value) => value == null || value.trim().isEmpty
+                  ? 'Bitte einen Titel eingeben.'
+                  : null,
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<CalendarEventCategory>(
@@ -561,9 +568,12 @@ class _CalendarEventDialogState extends State<_CalendarEventDialog> {
             Row(
               children: [
                 Expanded(
-                  child: TextField(
+                  child: TextFormField(
                     controller: dateController,
                     readOnly: true,
+                    validator: (value) => _parseDate(value ?? '') == null
+                        ? 'Bitte ein gültiges Datum auswählen.'
+                        : null,
                     decoration: const InputDecoration(
                       labelText: 'Datum',
                       suffixIcon: Icon(Icons.calendar_today_outlined),
@@ -573,9 +583,13 @@ class _CalendarEventDialogState extends State<_CalendarEventDialog> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: TextField(
+                  child: TextFormField(
                     controller: timeController,
                     readOnly: true,
+                    validator: (value) => value == null ||
+                            !RegExp(r'^([01]\d|2[0-3]):[0-5]\d$').hasMatch(value)
+                        ? 'Bitte eine gültige Uhrzeit auswählen.'
+                        : null,
                     decoration: const InputDecoration(
                       labelText: 'Uhrzeit',
                       suffixIcon: Icon(Icons.schedule_outlined),
@@ -585,7 +599,8 @@ class _CalendarEventDialogState extends State<_CalendarEventDialog> {
                 ),
               ],
             ),
-          ],
+            ],
+          ),
         ),
       ),
       actions: [
@@ -595,14 +610,11 @@ class _CalendarEventDialogState extends State<_CalendarEventDialog> {
         ),
         FilledButton(
           onPressed: () {
-            final title = titleController.text.trim();
-            if (title.isEmpty) {
-              return;
-            }
+            if (!formKey.currentState!.validate()) return;
             Navigator.pop(
               context,
               CalendarEvent(
-                title: title,
+                title: titleController.text.trim(),
                 date: dateController.text.trim(),
                 time: timeController.text.trim(),
                 category: category,

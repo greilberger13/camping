@@ -8,10 +8,10 @@ class BirthDateDialog extends StatefulWidget {
 }
 
 class _BirthDateDialogState extends State<BirthDateDialog> {
+  final formKey = GlobalKey<FormState>();
   int? day;
   int? month;
   final yearController = TextEditingController();
-  String? errorMessage;
 
   @override
   void dispose() {
@@ -23,67 +23,78 @@ class _BirthDateDialogState extends State<BirthDateDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('Geburtsdatum'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<int>(
-                  initialValue: day,
-                  decoration: const InputDecoration(labelText: 'Tag'),
-                  items: [
-                    for (var value = 1; value <= 31; value++)
-                      DropdownMenuItem(value: value, child: Text('$value')),
-                  ],
-                  onChanged: (value) => setState(() => day = value),
+      content: SingleChildScrollView(
+        child: Form(
+          key: formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<int>(
+                    initialValue: day,
+                    decoration: const InputDecoration(labelText: 'Tag'),
+                    validator: (value) => value == null
+                        ? 'Tag auswählen.'
+                        : null,
+                    items: [
+                      for (var value = 1; value <= 31; value++)
+                        DropdownMenuItem(value: value, child: Text('$value')),
+                    ],
+                    onChanged: (value) => setState(() => day = value),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 2,
-                child: DropdownButtonFormField<int>(
-                  initialValue: month,
-                  decoration: const InputDecoration(labelText: 'Monat'),
-                  items: [
-                    for (var value = 1; value <= 12; value++)
-                      DropdownMenuItem(
-                        value: value,
-                        child: Text(_monthName(value)),
-                      ),
-                  ],
-                  onChanged: (value) => setState(() => month = value),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: DropdownButtonFormField<int>(
+                    initialValue: month,
+                    decoration: const InputDecoration(labelText: 'Monat'),
+                    validator: (value) => value == null
+                        ? 'Monat auswählen.'
+                        : null,
+                    items: [
+                      for (var value = 1; value <= 12; value++)
+                        DropdownMenuItem(
+                          value: value,
+                          child: Text(_monthName(value)),
+                        ),
+                    ],
+                    onChanged: (value) => setState(() => month = value),
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: yearController,
-            keyboardType: TextInputType.number,
-            onChanged: (_) {
-              if (errorMessage != null) {
-                setState(() => errorMessage = null);
-              }
-            },
-            decoration: const InputDecoration(
-              labelText: 'Jahr',
-              hintText: 'z. B. 1960',
+              ],
             ),
-          ),
-          if (errorMessage != null) ...[
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                errorMessage!,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.error,
-                ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: yearController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Jahr',
+                hintText: 'z. B. 1960',
               ),
+              validator: (input) {
+                final text = (input ?? '').trim();
+                final year = int.tryParse(text);
+                if (year == null || text.length != 4 ||
+                    year < 1900 || year > DateTime.now().year) {
+                  return 'Vierstelliges Jahr ab 1900 eingeben.';
+                }
+                if (day != null && month != null) {
+                  final date = DateTime(year, month!, day!);
+                  if (date.year != year ||
+                      date.month != month || date.day != day) {
+                    return 'Dieses Datum gibt es nicht.';
+                  }
+                }
+                return null;
+              },
             ),
           ],
-        ],
+          ),
+        ),
       ),
       actions: [
         TextButton(
@@ -99,27 +110,8 @@ class _BirthDateDialogState extends State<BirthDateDialog> {
   }
 
   void _save() {
-    final yearText = yearController.text.trim();
-    final year = int.tryParse(yearText);
-    if (day == null || month == null || year == null) {
-      setState(() => errorMessage = 'Tag, Monat und Jahr auswählen.');
-      return;
-    }
-
-    if (yearText.length != 4 || year < 1900 || year > 2026) {
-      setState(
-        () => errorMessage =
-            'Das Jahr muss vierstellig und zwischen 1900 und 2026 liegen.',
-      );
-      return;
-    }
-
-    final date = DateTime(year, month!, day!);
-    if (date.year != year || date.month != month || date.day != day) {
-      setState(() => errorMessage = 'Dieses Datum gibt es nicht.');
-      return;
-    }
-
+    if (!formKey.currentState!.validate()) return;
+    final date = DateTime(int.parse(yearController.text.trim()), month!, day!);
     Navigator.pop(context, date);
   }
 

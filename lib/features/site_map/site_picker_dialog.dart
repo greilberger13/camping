@@ -108,23 +108,35 @@ class _SitePickerDialogState extends State<SitePickerDialog> {
               Row(
                 children: [
                   Expanded(
-                    child: TextButton.icon(
-                      onPressed: () => _changeDate(true),
-                      icon: const Icon(Icons.event),
-                      label: Text('Anreise ${_display(arrival)}'),
+                    child: TextFormField(
+                      key: ValueKey(('arrival', arrival)),
+                      initialValue: _display(arrival),
+                      readOnly: true,
+                      onTap: () => _changeDate(true),
+                      decoration: const InputDecoration(
+                        labelText: 'Anreise',
+                        suffixIcon: Icon(Icons.event_outlined),
+                      ),
                     ),
                   ),
+                  const SizedBox(width: 12),
                   Expanded(
-                    child: TextButton.icon(
-                      onPressed: () => _changeDate(false),
-                      icon: const Icon(Icons.event),
-                      label: Text('Abreise ${_display(departure)}'),
+                    child: TextFormField(
+                      key: ValueKey(('departure', departure)),
+                      initialValue: _display(departure),
+                      readOnly: true,
+                      onTap: () => _changeDate(false),
+                      decoration: InputDecoration(
+                        labelText: 'Abreise',
+                        suffixIcon: const Icon(Icons.event_outlined),
+                        errorText: validDates
+                            ? null
+                            : 'Vor der Anreise.',
+                      ),
                     ),
                   ),
                 ],
               ),
-              if (!validDates)
-                const Text('Abreise darf nicht vor Anreise liegen.'),
               AspectRatio(
                 aspectRatio: 1,
                 child: LayoutBuilder(
@@ -145,10 +157,16 @@ class _SitePickerDialogState extends State<SitePickerDialog> {
                 ),
               ),
               if (selected != null) Text('Stellplatz $selected'),
+              if (selected == null && validDates)
+                const Text('Bitte einen freien Stellplatz auswählen.'),
               if (warning)
                 const Text(
                   'Achtung: Am Anreisetag ist auf diesem Platz '
                   'ein Late-Check-Out vorgemerkt.',
+                  style: TextStyle(
+                    color: Color(0xffa65312),
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
             ],
           ),
@@ -183,8 +201,8 @@ class _SitePickerDialogState extends State<SitePickerDialog> {
     return Positioned(
       left: position.dx * size,
       top: position.dy * size,
-      width: 42,
-      height: 34,
+      width: 45,
+      height: 37,
       child: Tooltip(
         message: 'Platz ${site.number}: '
             '${available ? 'frei' : 'nicht verfügbar'}',
@@ -192,12 +210,16 @@ class _SitePickerDialogState extends State<SitePickerDialog> {
           onTap: available ? () => setState(() => selected = site.number) : null,
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: available
-                  ? site.color.withValues(alpha: 0.2)
-                  : const Color(0xffb8bec3).withValues(alpha: 0.6),
+                color: site.status == 'Gesperrt'
+                  ? Colors.black
+                  : available
+                    ? site.color.withValues(alpha: 0.2)
+                    : const Color(0xffb8bec3).withValues(alpha: 0.6),
               border: Border.all(
                 color: site.number == selected
                     ? const Color(0xff1f6f68)
+                  : site.status == 'Gesperrt'
+                    ? Colors.black
                     : available
                         ? const Color(0xff32866d)
                         : const Color(0xff777f86),

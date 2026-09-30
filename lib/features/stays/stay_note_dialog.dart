@@ -12,6 +12,7 @@ class StayNoteDialog extends StatefulWidget {
 }
 
 class _StayNoteDialogState extends State<StayNoteDialog> {
+  final formKey = GlobalKey<FormState>();
   final textController = TextEditingController();
   StayNoteCategory category = StayNoteCategory.general;
   int? siteNumber;
@@ -33,9 +34,12 @@ class _StayNoteDialogState extends State<StayNoteDialog> {
     return AlertDialog(
       title: const Text('Neue Notiz'),
       content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+        child: Form(
+          key: formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
             DropdownButtonFormField<StayNoteCategory>(
               initialValue: category,
               decoration: const InputDecoration(labelText: 'Rubrik'),
@@ -56,6 +60,9 @@ class _StayNoteDialogState extends State<StayNoteDialog> {
             DropdownButtonFormField<int>(
               initialValue: siteNumber,
               decoration: const InputDecoration(labelText: 'Stellplatz'),
+              validator: (value) => value == null
+                  ? 'Bitte einen Stellplatz auswählen.'
+                  : null,
               items: [
                 for (final number in widget.siteNumbers)
                   DropdownMenuItem(
@@ -66,7 +73,7 @@ class _StayNoteDialogState extends State<StayNoteDialog> {
               onChanged: (value) => setState(() => siteNumber = value),
             ),
             const SizedBox(height: 12),
-            TextField(
+            TextFormField(
               controller: textController,
               autofocus: true,
               maxLines: 3,
@@ -74,8 +81,12 @@ class _StayNoteDialogState extends State<StayNoteDialog> {
                 labelText: 'Notiz',
                 hintText: 'z. B. 5 Semmeln bestellt',
               ),
+              validator: (value) => value == null || value.trim().isEmpty
+                  ? 'Bitte eine Notiz eingeben.'
+                  : null,
             ),
-          ],
+            ],
+          ),
         ),
       ),
       actions: [
@@ -92,10 +103,8 @@ class _StayNoteDialogState extends State<StayNoteDialog> {
   }
 
   void _save() {
+    if (!formKey.currentState!.validate()) return;
     final text = textController.text.trim();
-    if (text.isEmpty || siteNumber == null) {
-      return;
-    }
 
     Navigator.pop(
       context,

@@ -20,6 +20,7 @@ class BookingOrderDialog extends StatefulWidget {
 }
 
 class _BookingOrderDialogState extends State<BookingOrderDialog> {
+  final formKey = GlobalKey<FormState>();
   final quantities = <String, int>{};
   String? selectedProductId;
   DateTime? serviceDate;
@@ -65,28 +66,39 @@ class _BookingOrderDialogState extends State<BookingOrderDialog> {
     return AlertDialog(
       title: Text('Bestellung für Platz ${widget.booking.siteNumber}'),
       content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.event_outlined),
-              title: const Text('Bereitstellung'),
-              subtitle: Text(
-                serviceDate == null
-                    ? 'Kein gültiger Buchungszeitraum'
-                    : MaterialLocalizations.of(context).formatMediumDate(
-                        serviceDate!,
-                      ),
+        child: Form(
+          key: formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+            TextFormField(
+              key: ValueKey(serviceDate),
+              initialValue: serviceDate == null
+                  ? ''
+                  : MaterialLocalizations.of(context).formatMediumDate(
+                      serviceDate!,
+                    ),
+              readOnly: true,
+              decoration: const InputDecoration(
+                labelText: 'Bereitstellung',
+                suffixIcon: Icon(Icons.event_outlined),
               ),
               onTap: serviceDate == null ? null : _chooseDate,
+              validator: (_) => serviceDate == null
+                  ? 'Kein gültiger Buchungszeitraum.'
+                  : null,
             ),
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     initialValue: selectedProductId,
                     decoration: const InputDecoration(labelText: 'Artikel'),
+                    validator: (_) => quantities.isEmpty
+                        ? 'Bitte mindestens einen Artikel hinzufügen.'
+                        : null,
                     items: [
                       for (final product in widget.products)
                         DropdownMenuItem(
@@ -127,7 +139,8 @@ class _BookingOrderDialogState extends State<BookingOrderDialog> {
                   setState(() => quantities.remove(product.id));
                 },
               ),
-          ],
+            ],
+          ),
         ),
       ),
       actions: [
@@ -136,11 +149,7 @@ class _BookingOrderDialogState extends State<BookingOrderDialog> {
           child: const Text('Abbrechen'),
         ),
         FilledButton(
-            onPressed: selectedProducts.isEmpty ||
-                serviceDate == null ||
-                widget.booking.id == null
-              ? null
-              : _save,
+          onPressed: _save,
           child: const Text('Bestellung speichern'),
         ),
       ],
@@ -148,6 +157,13 @@ class _BookingOrderDialogState extends State<BookingOrderDialog> {
   }
 
   void _save() {
+    if (!formKey.currentState!.validate()) return;
+    if (widget.booking.id == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Buchung zuerst speichern.')),
+      );
+      return;
+    }
     final date = serviceDate!;
     final orders = [
       for (final product in widget.products)

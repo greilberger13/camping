@@ -73,11 +73,12 @@ class _BookingDialogState extends State<BookingDialog> {
       vehicleType = booking.vehicleType;
     } else if (widget.initialSiteNumber != null) {
       siteNumber = widget.initialSiteNumber;
-      final selectedSite = widget.sites.firstWhere(
+      final matchingSites = widget.sites.where(
         (site) => site.number == widget.initialSiteNumber,
-        orElse: () => widget.sites.first,
       );
-      vehicleType = _vehicleTypeFor(selectedSite);
+      if (matchingSites.isNotEmpty) {
+        vehicleType = _vehicleTypeFor(matchingSites.first);
+      }
     }
   }
 
@@ -101,6 +102,7 @@ class _BookingDialogState extends State<BookingDialog> {
         ),
         content: Form(
           key: formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
           child: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               TextFormField(
@@ -150,6 +152,9 @@ class _BookingDialogState extends State<BookingDialog> {
                   child: TextFormField(
                     controller: arrivalController,
                     readOnly: true,
+                    validator: (value) => _parseDate(value) == null
+                        ? 'Anreise auswählen'
+                        : null,
                     decoration: const InputDecoration(
                       labelText: 'Anreise',
                       suffixIcon: Icon(Icons.calendar_today_outlined),
@@ -239,7 +244,13 @@ class _BookingDialogState extends State<BookingDialog> {
                 ],
               ),
               if (_lateCheckoutWarning)
-                const Text('Achtung: Late-Check-Out am Anreisetag.'),
+                const Text(
+                  'Achtung: Late-Check-Out am Anreisetag.',
+                  style: TextStyle(
+                    color: Color(0xffa65312),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Hund'),
