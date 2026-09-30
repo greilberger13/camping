@@ -187,7 +187,9 @@ class _CampingHomePageState extends State<CampingHomePage> {
               ),
             ],
           ),
-          drawer: wide ? null : Drawer(child: _navigation(context)),
+            drawer: wide
+              ? null
+              : Drawer(child: _navigation(context, inDrawer: true)),
           body: connectionStatus == 'Verbinde ...'
               ? const Center(
                   child: CircularProgressIndicator(
@@ -197,7 +199,10 @@ class _CampingHomePageState extends State<CampingHomePage> {
               : Row(
                   children: [
                     if (wide)
-                      SizedBox(width: 224, child: _navigation(context)),
+                      SizedBox(
+                        width: 224,
+                        child: _navigation(context, inDrawer: false),
+                      ),
                     Expanded(child: _page(context)),
                   ],
                 ),
@@ -215,7 +220,7 @@ class _CampingHomePageState extends State<CampingHomePage> {
     );
   }
 
-  Widget _navigation(BuildContext context) {
+  Widget _navigation(BuildContext context, {required bool inDrawer}) {
     return Material(
       color: const Color(0xffeaf1ed),
       child: SafeArea(
@@ -242,7 +247,7 @@ class _CampingHomePageState extends State<CampingHomePage> {
                 title: Text(nav[i].$1),
                 onTap: () {
                   setState(() => selected = i);
-                  if (Scaffold.of(context).hasDrawer) {
+                  if (inDrawer) {
                     Navigator.pop(context);
                   }
                 },
@@ -255,7 +260,7 @@ class _CampingHomePageState extends State<CampingHomePage> {
               title: Text('Einstellungen'),
               onTap: () {
                 setState(() => selected = 7);
-                if (Scaffold.of(context).hasDrawer) Navigator.pop(context);
+                if (inDrawer) Navigator.pop(context);
               },
             ),
             const SizedBox(height: 12),
@@ -278,17 +283,6 @@ class _CampingHomePageState extends State<CampingHomePage> {
           ),
           onOrder: (booking) => unawaited(
             _perform(() => _openOrderForBooking(booking)),
-          ),
-          orders: orders,
-          onOrderUpdated: (order) => unawaited(
-            _perform(() => _updateOrder(order)),
-          ),
-          notes: notes,
-          onNoteAdded: (note) => unawaited(
-            _perform(() => _addNote(note)),
-          ),
-          onNoteDeleted: (note) => unawaited(
-            _perform(() => _deleteNote(note)),
           ),
         );
       case 2:
