@@ -75,7 +75,7 @@ class _BookingsPageState extends State<BookingsPage> {
                 for (final booking in filteredBookings)
                   _BookingListTile(
                     booking: booking,
-                    onTap: () => _showBookingDetails(context, booking),
+                    onExport: () => _prepareFeratelReport(booking),
                     onDelete: () => _confirmDelete(context, booking),
                     onEdit: () => widget.onEdit(booking),
                   ),
@@ -87,11 +87,11 @@ class _BookingsPageState extends State<BookingsPage> {
     );
   }
 
-  void _showBookingDetails(BuildContext context, Booking booking) {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => _BookingDetails(booking: booking),
+  Future<void> _prepareFeratelReport(Booking booking) async {
+    final result = await const FeratelExportGateway().submitGuestReport(booking);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message ?? 'Export vorbereitet.')),
     );
   }
 
@@ -340,13 +340,13 @@ class _BookingDay extends StatelessWidget {
 class _BookingListTile extends StatelessWidget {
   const _BookingListTile({
     required this.booking,
-    required this.onTap,
+    required this.onExport,
     required this.onDelete,
     required this.onEdit,
   });
 
   final Booking booking;
-  final VoidCallback onTap;
+  final VoidCallback onExport;
   final VoidCallback onDelete;
   final VoidCallback onEdit;
 
@@ -363,7 +363,6 @@ class _BookingListTile extends StatelessWidget {
     ].join(' · ');
 
     return ListTile(
-      onTap: onTap,
       leading: CircleAvatar(
         backgroundColor: const Color(0xffa9ed21),
         child: Text('${booking.siteNumber}'),
@@ -375,11 +374,15 @@ class _BookingListTile extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Chip(label: Text('Offen')),
           IconButton(
             onPressed: onEdit,
             tooltip: 'Buchung bearbeiten',
             icon: const Icon(Icons.edit_outlined),
+          ),
+          IconButton(
+            onPressed: onExport,
+            tooltip: 'Feratel vorbereiten',
+            icon: const Icon(Icons.upload_file_outlined),
           ),
           IconButton(
             onPressed: onDelete,
@@ -392,99 +395,3 @@ class _BookingListTile extends StatelessWidget {
   }
 }
 
-class _BookingDetails extends StatelessWidget {
-  const _BookingDetails({required this.booking});
-
-  final Booking booking;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 28),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            booking.guestName,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-          ),
-          Text(
-            'Stellplatz ${booking.siteNumber} · '
-            '${booking.arrival} – ${booking.departure}',
-            style: const TextStyle(color: Color(0xff61716d)),
-          ),
-          const SizedBox(height: 20),
-          _DetailRow(label: 'Erwachsene', value: '${booking.adults}'),
-          _DetailRow(label: 'Kinder', value: '${booking.children}'),
-          _DetailRow(label: 'Fahrzeugart', value: booking.vehicleType.label),
-          _DetailRow(label: 'Hund', value: booking.hasDog ? 'Ja' : 'Nein'),
-          _DetailRow(
-            label: 'Strom',
-            value: booking.hasElectricity ? 'Ja' : 'Nein',
-          ),
-          _DetailRow(
-            label: 'Late-Check-Out',
-            value: booking.lateCheckout ? 'Ja' : 'Nein',
-          ),
-          _DetailRow(label: 'Adresse', value: booking.address ?? 'Nicht erfasst'),
-          _DetailRow(
-            label: 'Geburtsdatum',
-            value: booking.birthDate ?? 'Nicht erfasst',
-          ),
-          _DetailRow(label: 'Telefon', value: booking.phone ?? 'Nicht erfasst'),
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerRight,
-            child: OutlinedButton.icon(
-              onPressed: () => _prepareFeratelReport(context),
-              icon: const Icon(Icons.upload_file_outlined),
-              label: const Text('Feratel vorbereiten'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _prepareFeratelReport(BuildContext context) async {
-    final result = await const FeratelExportGateway().submitGuestReport(booking);
-    if (!context.mounted) {
-      return;
-    }
-
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(result.message ?? 'Export vorbereitet.')),
-    );
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  const _DetailRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-          Expanded(child: Text(value)),
-        ],
-      ),
-    );
-  }
-}

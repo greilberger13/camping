@@ -50,7 +50,7 @@ class _BookingDialogState extends State<BookingDialog> {
   int adults = 2;
   int children = 0;
   int? siteNumber;
-  VehicleType vehicleType = VehicleType.motorhome;
+  VehicleType? vehicleType;
   static const availability = BookingAvailability();
 
   @override
@@ -72,12 +72,12 @@ class _BookingDialogState extends State<BookingDialog> {
       siteNumber = booking.siteNumber;
       vehicleType = booking.vehicleType;
     } else if (widget.initialSiteNumber != null) {
-      siteNumber = widget.initialSiteNumber;
       final matchingSites = widget.sites.where(
         (site) => site.number == widget.initialSiteNumber,
       );
       if (matchingSites.isNotEmpty) {
-        vehicleType = _vehicleTypeFor(matchingSites.first);
+        siteNumber = matchingSites.first.number;
+        vehicleType = matchingSites.first.vehicleType;
       }
     }
   }
@@ -200,8 +200,24 @@ class _BookingDialogState extends State<BookingDialog> {
                 setState(() => children = value);
               }),
               DropdownButtonFormField<VehicleType>(
+                key: ValueKey(vehicleType),
                 initialValue: vehicleType,
-                decoration: const InputDecoration(labelText: 'Fahrzeugart'),
+                decoration: InputDecoration(
+                  labelText: 'Fahrzeugart',
+                  suffixIcon: vehicleType == null
+                      ? null
+                      : IconButton(
+                          tooltip: 'Fahrzeugart löschen',
+                          onPressed: () => setState(() {
+                            vehicleType = null;
+                            siteNumber = null;
+                          }),
+                          icon: const Icon(Icons.clear),
+                        ),
+                ),
+                validator: (value) => value == null
+                    ? 'Fahrzeugart auswählen oder Platz im Plan wählen'
+                    : null,
                 items: [
                   for (final value in VehicleType.values)
                     DropdownMenuItem(
@@ -263,13 +279,12 @@ class _BookingDialogState extends State<BookingDialog> {
                 value: electricity,
                 onChanged: (value) => setState(() => electricity = value),
               ),
-              if (widget.initialBooking != null)
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Late-Check-Out'),
-                  value: lateCheckout,
-                  onChanged: (value) => setState(() => lateCheckout = value),
-                ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Late-Check-Out'),
+                value: lateCheckout,
+                onChanged: (value) => setState(() => lateCheckout = value),
+              ),
             ]),
           ),
         ),
@@ -288,7 +303,7 @@ class _BookingDialogState extends State<BookingDialog> {
                   hasElectricity: electricity,
                   lateCheckout: lateCheckout,
                   siteNumber: siteNumber!,
-                  vehicleType: vehicleType,
+                  vehicleType: vehicleType!,
                   address: _optionalValue(addressController),
                   birthDate: _optionalValue(birthDateController),
                   phone: _optionalValue(phoneController),
@@ -423,6 +438,7 @@ class _BookingDialogState extends State<BookingDialog> {
       arrivalController.text = _formatDate(result.arrival);
       departureController.text = _formatDate(result.departure);
       siteNumber = result.siteNumber;
+      vehicleType = result.vehicleType;
     });
   }
 
@@ -431,19 +447,6 @@ class _BookingDialogState extends State<BookingDialog> {
         _draft(siteNumber!),
         widget.existingBookings,
       );
-
-  VehicleType _vehicleTypeFor(CampSite site) {
-    switch (site.type) {
-      case 'Auto / Van':
-        return VehicleType.carVan;
-      case 'Zelt':
-        return VehicleType.tent;
-      case 'Auto mit Anhänger':
-        return VehicleType.carWithTrailer;
-      default:
-        return VehicleType.motorhome;
-    }
-  }
 
   Booking _draft(int number) {
     return Booking(
@@ -455,7 +458,9 @@ class _BookingDialogState extends State<BookingDialog> {
       children: children,
       hasDog: dog,
       siteNumber: number,
-      vehicleType: vehicleType,
+      vehicleType: vehicleType ?? widget.sites
+          .firstWhere((site) => site.number == number)
+          .vehicleType,
     );
   }
 

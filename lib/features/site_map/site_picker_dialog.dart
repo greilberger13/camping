@@ -7,11 +7,17 @@ import '../../models/vehicle_type.dart';
 import '../../services/booking_availability.dart';
 
 class SiteSelection {
-  const SiteSelection(this.siteNumber, this.arrival, this.departure);
+  const SiteSelection(
+    this.siteNumber,
+    this.arrival,
+    this.departure,
+    this.vehicleType,
+  );
 
   final int siteNumber;
   final DateTime arrival;
   final DateTime departure;
+  final VehicleType vehicleType;
 }
 
 class SitePickerDialog extends StatefulWidget {
@@ -28,7 +34,7 @@ class SitePickerDialog extends StatefulWidget {
 
   final List<CampSite> sites;
   final List<Booking> bookings;
-  final VehicleType vehicleType;
+  final VehicleType? vehicleType;
   final DateTime arrival;
   final DateTime departure;
   final String? bookingId;
@@ -55,19 +61,19 @@ class _SitePickerDialogState extends State<SitePickerDialog> {
       '${date.day.toString().padLeft(2, '0')}.'
       '${date.month.toString().padLeft(2, '0')}.${date.year}';
 
-  Booking _draft(int siteNumber) => Booking(
+  Booking _draft(CampSite site) => Booking(
         id: widget.bookingId,
         guestName: '',
         arrival: _display(arrival),
         departure: _display(departure),
         adults: 1,
         hasDog: false,
-        siteNumber: siteNumber,
-        vehicleType: widget.vehicleType,
+        siteNumber: site.number,
+        vehicleType: widget.vehicleType ?? site.vehicleType,
       );
 
   bool _available(CampSite site) =>
-      availability.isAvailable(_draft(site.number), site, widget.bookings);
+      availability.isAvailable(_draft(site), site, widget.bookings);
 
   Future<void> _changeDate(bool isArrival) async {
     final date = await showDatePicker(
@@ -94,7 +100,7 @@ class _SitePickerDialogState extends State<SitePickerDialog> {
     final chosen = widget.sites.where((site) => site.number == selected);
     final warning = chosen.isNotEmpty &&
         availability.hasLateCheckoutWarning(
-          _draft(chosen.first.number),
+          _draft(chosen.first),
           widget.bookings,
         );
     return AlertDialog(
@@ -185,7 +191,12 @@ class _SitePickerDialogState extends State<SitePickerDialog> {
               ? null
               : () => Navigator.pop(
                     context,
-                    SiteSelection(selected!, arrival, departure),
+                    SiteSelection(
+                      selected!,
+                      arrival,
+                      departure,
+                      widget.vehicleType ?? chosen.first.vehicleType,
+                    ),
                   ),
           child: const Text('Übernehmen'),
         ),
@@ -201,8 +212,8 @@ class _SitePickerDialogState extends State<SitePickerDialog> {
     return Positioned(
       left: position.dx * size,
       top: position.dy * size,
-      width: 45,
-      height: 37,
+      width: 42,
+      height: 34,
       child: Tooltip(
         message: 'Platz ${site.number}: '
             '${available ? 'frei' : 'nicht verfügbar'}',
@@ -211,7 +222,7 @@ class _SitePickerDialogState extends State<SitePickerDialog> {
           child: DecoratedBox(
             decoration: BoxDecoration(
                 color: site.status == 'Gesperrt'
-                  ? Colors.black
+                  ? const Color(0xffc62828).withValues(alpha: 0.9)
                   : available
                     ? site.color.withValues(alpha: 0.2)
                     : const Color(0xffb8bec3).withValues(alpha: 0.6),
@@ -219,7 +230,7 @@ class _SitePickerDialogState extends State<SitePickerDialog> {
                 color: site.number == selected
                     ? const Color(0xff1f6f68)
                   : site.status == 'Gesperrt'
-                    ? Colors.black
+                    ? const Color(0xffc62828)
                     : available
                         ? const Color(0xff32866d)
                         : const Color(0xff777f86),
@@ -227,6 +238,11 @@ class _SitePickerDialogState extends State<SitePickerDialog> {
               ),
               borderRadius: BorderRadius.circular(6),
             ),
+            child: site.status == 'Gesperrt'
+                ? const Center(
+                    child: Icon(Icons.close, color: Colors.white, size: 33),
+                  )
+                : null,
           ),
         ),
       ),

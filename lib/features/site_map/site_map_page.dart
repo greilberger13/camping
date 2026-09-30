@@ -63,7 +63,7 @@ class _SiteMapPageState extends State<SiteMapPage> {
                     _Legend(Color(0xff32866d), 'Frei'),
                     _Legend(Color(0xffd69b32), 'Reserviert'),
                     _Legend(Color(0xffc65b54), 'Belegt'),
-                    _Legend(Colors.black, 'Gesperrt'),
+                    _Legend(Color(0xffc62828), 'Gesperrt'),
                   ],
                 ),
               ),
@@ -270,7 +270,7 @@ class _ImageSiteOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final statusColor = site.status == 'Gesperrt'
-      ? Colors.black
+      ? const Color(0xffc62828)
       : booking != null || site.status == 'Belegt'
         ? const Color(0xffc65b54)
         : site.status == 'Reserviert'
@@ -282,7 +282,7 @@ class _ImageSiteOverlay extends StatelessWidget {
         color: calibrating
             ? const Color(0xff1f6f68).withValues(alpha: 0.35)
           : site.status == 'Gesperrt'
-            ? Colors.black
+            ? const Color(0xffc62828).withValues(alpha: 0.9)
             : disabled
                 ? const Color(0xffb8bec3).withValues(alpha: 0.6)
                 : color.withValues(alpha: 0.22),
@@ -300,14 +300,18 @@ class _ImageSiteOverlay extends StatelessWidget {
                 style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11),
               ),
             )
-          : null,
+          : site.status == 'Gesperrt'
+              ? const Center(
+                  child: Icon(Icons.close, color: Colors.white, size: 33),
+                )
+              : null,
     );
 
     return Positioned(
       left: horizontalOffset + position.dx * imageSize,
       top: verticalOffset + position.dy * imageSize,
-      width: 45,
-      height: 37,
+      width: 48,
+      height: 40,
       child: calibrating
           ? GestureDetector(
               onPanUpdate: (details) {
@@ -401,7 +405,7 @@ class _SiteTile extends StatelessWidget {
       child: Ink(
         decoration: BoxDecoration(
           color: site.status == 'Gesperrt'
-              ? Colors.black
+              ? const Color(0xffc62828).withValues(alpha: 0.9)
               : disabled
                   ? const Color(0xffb8bec3)
                   : color,
@@ -412,14 +416,27 @@ class _SiteTile extends StatelessWidget {
           ),
         ),
         child: Center(
-          child: Text(
-            '${site.number}',
-            style: TextStyle(
-              fontSize: 21,
-              fontWeight: FontWeight.w800,
-              color: site.status == 'Gesperrt' ? Colors.white : null,
-            ),
-          ),
+          child: site.status == 'Gesperrt'
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${site.number}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const Icon(Icons.close, color: Colors.white, size: 30),
+                  ],
+                )
+              : Text(
+                  '${site.number}',
+                  style: const TextStyle(
+                    fontSize: 21,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
         ),
       ),
     );
@@ -427,7 +444,7 @@ class _SiteTile extends StatelessWidget {
 
   Color get _statusColor {
     if (site.status == 'Gesperrt') {
-      return Colors.black;
+      return const Color(0xffc62828);
     }
     if (booking != null) {
       return const Color(0xffd69b32);

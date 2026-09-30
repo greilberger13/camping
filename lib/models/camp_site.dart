@@ -11,6 +11,21 @@ class CampSite {
   final Color color;
   final String? guest;
 
+  VehicleType get vehicleType {
+    switch (type) {
+      case 'Wohnmobil':
+        return VehicleType.motorhome;
+      case 'Auto / Van':
+        return VehicleType.carVan;
+      case 'Zelt':
+        return VehicleType.tent;
+      case 'Auto mit Anhänger':
+        return VehicleType.carWithTrailer;
+      default:
+        return VehicleType.other;
+    }
+  }
+
   CampSite copyWith({String? status, String? guest}) {
     return CampSite(
       number,
