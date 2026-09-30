@@ -33,8 +33,11 @@ class SupabaseOrderRepository implements OrderRepository {
   @override
   Future<List<Order>> loadOrders() async {
     final rows = await database.client
-        .from('orders')
-      .select('*, camp_sites!inner(site_number)')
+        .from('order_items')
+        .select(
+          '*, order_groups!inner('
+          'booking_id, service_date, camp_sites!inner(site_number))',
+        )
         .order('created_at');
     orderCache
       ..clear()
@@ -79,24 +82,71 @@ class SupabaseOrderRepository implements OrderRepository {
 
   @override
   Future<Order> createOrder(Order order) async {
-    final siteId = await _siteIdForNumber(order.siteNumber);
-    final row = await database.client
-        .from('orders')
-        .insert(_orderToRow(order, siteId: siteId))
-      .select('*, camp_sites!inner(site_number)')
-        .single();
-    final stored = _orderFromRow(row);
-    orderCache.add(stored);
-    return stored;
+    final date = order.serviceDate;
+    if (date == null) {
+      throw StateError('An order requires a service date.');
+    }
+    final stored = await createOrderBatch(
+      OrderBatch(
+        siteNumber: order.siteNumber,
+        bookingId: order.bookingId,
+        serviceDate: date,
+        items: [order],
+      ),
+    );
+    return stored.single;
   }
 
   @override
   Future<List<Order>> createOrderBatch(OrderBatch batch) async {
-    final stored = <Order>[];
-    for (final item in batch.items) {
-      stored.add(await createOrder(item));
+    if (batch.bookingId == null || batch.items.isEmpty) {
+      throw StateError('A batch requires a booking and products.');
     }
+    final productIds = <String>{};
+    for (final item in batch.items) {
+      if (item.productId == null ||
+          !productIds.add(item.productId!) ||
+          item.quantity < 1 ||
+          item.siteNumber != batch.siteNumber ||
+          item.bookingId != batch.bookingId) {
+        throw StateError('Invalid batch item.');
+      }
+    }
+
+    final rows = await database.client.rpc(
+      'create_order_batch',
+      params: {
+        'p_booking_id': batch.bookingId,
+        'p_site_number': batch.siteNumber,
+        'p_service_date': batch.serviceDate.toIso8601String().split('T').first,
+        'p_items': [
+          for (final item in batch.items)
+            {'product_id': item.productId, 'quantity': item.quantity},
+        ],
+      },
+    ) as List<dynamic>;
+    final stored = <Order>[
+      for (final value in rows)
+        _storedBatchItem(value as Map<String, dynamic>, batch),
+    ];
+    orderCache.addAll(stored);
     return stored;
+  }
+
+  Order _storedBatchItem(Map<String, dynamic> row, OrderBatch batch) {
+    final productId = row['product_id'] as String;
+    return Order(
+      id: row['id'] as String,
+      bookingId: batch.bookingId,
+      siteNumber: batch.siteNumber,
+      description: row['description'] as String,
+      quantity: row['quantity'] as int,
+      category: _categoryFromValue(row['category'] as String),
+      productId: productId,
+      unitPrice: (row['unit_price'] as num).toDouble(),
+      serviceDate: batch.serviceDate,
+      status: _statusFromValue(row['status'] as String),
+    );
   }
 
   @override
@@ -112,10 +162,13 @@ class SupabaseOrderRepository implements OrderRepository {
     }
 
     final row = await database.client
-        .from('orders')
+        .from('order_items')
         .update({'status': _statusValue(order.status)})
         .eq('id', existing.id!)
-        .select('*, camp_sites!inner(site_number)')
+        .select(
+          '*, order_groups!inner('
+          'booking_id, service_date, camp_sites!inner(site_number))',
+        )
         .single();
     final updated = _orderFromRow(row);
     orderCache[matchIndex] = updated;
@@ -131,22 +184,6 @@ class SupabaseOrderRepository implements OrderRepository {
     };
   }
 
-  Map<String, dynamic> _orderToRow(
-    Order order, {
-    required String siteId,
-  }) {
-    return {
-      'site_id': siteId,
-      'booking_id': order.bookingId,
-      'product_id': order.productId,
-      'description': order.description,
-      'quantity': order.quantity,
-      'unit_price': order.unitPrice ?? 0,
-      'category': _categoryValue(order.category),
-      'status': _statusValue(order.status),
-    };
-  }
-
   OrderProduct _productFromRow(Map<String, dynamic> row) {
     return OrderProduct(
       id: row['id'] as String,
@@ -157,27 +194,20 @@ class SupabaseOrderRepository implements OrderRepository {
   }
 
   Order _orderFromRow(Map<String, dynamic> row) {
-    final site = row['camp_sites'] as Map<String, dynamic>;
+    final group = row['order_groups'] as Map<String, dynamic>;
+    final site = group['camp_sites'] as Map<String, dynamic>;
     return Order(
       id: row['id'] as String?,
-      bookingId: row['booking_id'] as String?,
+      bookingId: group['booking_id'] as String?,
       siteNumber: site['site_number'] as int,
       description: row['description'] as String,
       quantity: row['quantity'] as int,
       category: _categoryFromValue(row['category'] as String),
       productId: row['product_id'] as String?,
       unitPrice: (row['unit_price'] as num).toDouble(),
+      serviceDate: DateTime.parse(group['service_date'] as String),
       status: _statusFromValue(row['status'] as String),
     );
-  }
-
-  Future<String> _siteIdForNumber(int siteNumber) async {
-    final row = await database.client
-        .from('camp_sites')
-        .select('id')
-        .eq('site_number', siteNumber)
-        .single();
-    return row['id'] as String;
   }
 
   String _categoryValue(OrderCategory category) {

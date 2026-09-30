@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../integrations/hellocash/hellocash_gateway.dart';
@@ -5,20 +7,24 @@ import '../../models/booking.dart';
 import '../../models/invoice.dart';
 import '../../models/order.dart';
 import '../../models/payment.dart';
+import '../../models/pricing.dart';
 import '../../services/invoice_builder.dart';
+import '../../services/invoice_repository.dart';
 import '../../shared/widgets/page_frame.dart';
 
 class CheckoutPage extends StatefulWidget {
   const CheckoutPage({
     required this.bookings,
     required this.orders,
-    required this.electricityBySite,
+    required this.pricing,
+    required this.invoiceRepository,
     super.key,
   });
 
   final List<Booking> bookings;
   final List<Order> orders;
-  final Map<int, bool> electricityBySite;
+  final Pricing pricing;
+  final InvoiceRepository invoiceRepository;
 
   @override
   State<CheckoutPage> createState() => _CheckoutPageState();
@@ -27,42 +33,21 @@ class CheckoutPage extends StatefulWidget {
 class _CheckoutPageState extends State<CheckoutPage> {
   static const invoiceBuilder = InvoiceBuilder();
 
-  static const sampleInvoices = <Invoice>[
-    Invoice(
-      guestName: 'Lisa Moser',
-      siteNumber: 8,
-      lines: [
-        InvoiceLine(label: 'Stellplatz · 2 Nächte', quantity: 1, unitPrice: 42),
-        InvoiceLine(label: 'Personen · 2 Gäste', quantity: 2, unitPrice: 8),
-        InvoiceLine(label: 'Strom', quantity: 1, unitPrice: 6),
-        InvoiceLine(label: '2 × Bier', quantity: 2, unitPrice: 3.5),
-      ],
-    ),
-    Invoice(
-      guestName: 'Robert Steiner',
-      siteNumber: 11,
-      lines: [
-        InvoiceLine(label: 'Stellplatz · 3 Nächte', quantity: 1, unitPrice: 63),
-        InvoiceLine(label: 'Personen · 2 Gäste', quantity: 2, unitPrice: 8),
-      ],
-    ),
-  ];
-
-  final paidInvoices = <int>{};
-  final paymentMethods = <int, PaymentMethod>{};
-
   List<Invoice> get invoices {
-    if (widget.bookings.isEmpty) {
-      return sampleInvoices;
-    }
-
     return [
       for (final booking in widget.bookings)
-        invoiceBuilder.build(
-          booking: booking,
-          orders: widget.orders,
-          electricity: widget.electricityBySite[booking.siteNumber] ?? false,
-        ),
+        if (widget.invoiceRepository.invoices.any(
+          (invoice) => invoice.bookingId == booking.id,
+        ))
+          widget.invoiceRepository.invoices.firstWhere(
+            (invoice) => invoice.bookingId == booking.id,
+          )
+        else
+          invoiceBuilder.build(
+            booking: booking,
+            orders: widget.orders,
+            pricing: widget.pricing,
+          ),
     ];
   }
 
@@ -74,19 +59,20 @@ class _CheckoutPageState extends State<CheckoutPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SummaryRow(invoices: invoices, paidInvoices: paidInvoices),
+          _SummaryRow(invoices: invoices),
           const SizedBox(height: 24),
           for (final invoice in invoices)
             _InvoiceCard(
               invoice: invoice,
-              isPaid: paidInvoices.contains(invoice.siteNumber),
-              paymentMethod: paymentMethods[invoice.siteNumber],
-              onPaymentMethodSelected: (method) {
-                setState(() {
-                  paymentMethods[invoice.siteNumber] = method;
-                  paidInvoices.add(invoice.siteNumber);
-                });
+              isPaid: invoice.isPaid,
+              paymentMethod: switch (invoice.paymentMethod) {
+                'cash' => PaymentMethod.cash,
+                'card' => PaymentMethod.card,
+                'bank_transfer' => PaymentMethod.bankTransfer,
+                _ => null,
               },
+              onPaymentMethodSelected: (method) =>
+                  unawaited(_recordPayment(invoice, method)),
               onExport: () => _exportInvoice(invoice),
             ),
         ],
@@ -94,28 +80,55 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
   }
 
-  Future<void> _exportInvoice(Invoice invoice) async {
-    final result = await const HelloCashExportGateway().submitInvoice(invoice);
-    if (!mounted) {
-      return;
+  Future<void> _recordPayment(Invoice invoice, PaymentMethod method) async {
+    try {
+      final stored = await widget.invoiceRepository.saveSnapshot(invoice);
+      await widget.invoiceRepository.markPaid(
+        stored.bookingId!,
+        switch (method) {
+          PaymentMethod.cash => 'cash',
+          PaymentMethod.card => 'card',
+          PaymentMethod.bankTransfer => 'bank_transfer',
+        },
+      );
+      if (mounted) setState(() {});
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Zahlung nicht gespeichert: $error')),
+        );
+      }
     }
+  }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(result.message ?? 'Export vorbereitet.')),
-    );
+  Future<void> _exportInvoice(Invoice invoice) async {
+    try {
+      final snapshot = await widget.invoiceRepository.saveSnapshot(invoice);
+      final result = await const HelloCashExportGateway().submitInvoice(snapshot);
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.message ?? 'Export vorbereitet.')),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export nicht vorbereitet: $error')),
+        );
+      }
+    }
   }
 }
 
 class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({required this.invoices, required this.paidInvoices});
+  const _SummaryRow({required this.invoices});
 
   final List<Invoice> invoices;
-  final Set<int> paidInvoices;
 
   @override
   Widget build(BuildContext context) {
     final openInvoices = invoices
-        .where((invoice) => !paidInvoices.contains(invoice.siteNumber))
+      .where((invoice) => !invoice.isPaid)
         .toList();
     final openTotal = openInvoices.fold<double>(
       0,

@@ -18,11 +18,18 @@ bool _bookingOccupiesToday(Booking booking) {
 }
 
 class SiteMapPage extends StatefulWidget {
-  const SiteMapPage({required this.bookings, required this.sites, required this.onSiteTap, super.key});
+  const SiteMapPage({
+    required this.bookings,
+    required this.sites,
+    required this.onSiteTap,
+    required this.onManageSite,
+    super.key,
+  });
 
   final List<Booking> bookings;
   final List<CampSite> sites;
   final ValueChanged<int> onSiteTap;
+  final ValueChanged<CampSite> onManageSite;
 
   @override
   State<SiteMapPage> createState() => _SiteMapPageState();
@@ -30,6 +37,7 @@ class SiteMapPage extends StatefulWidget {
 
 class _SiteMapPageState extends State<SiteMapPage> {
   bool calibrating = false;
+  bool managing = false;
   late final Map<int, Offset> anchors = {
     for (final anchor in SitePlanAnchor.defaults) anchor.siteNumber: anchor.position,
   };
@@ -40,7 +48,9 @@ class _SiteMapPageState extends State<SiteMapPage> {
       title: 'Platzplan',
       subtitle: calibrating
           ? 'Ziehe die Punkte auf die passenden Zahlen im Plan'
-          : 'Tippe auf einen Stellplatz für Details',
+          : managing
+            ? 'Stellplatz antippen zum Sperren oder Freigeben'
+            : 'Freien Stellplatz antippen für eine Buchung',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -64,8 +74,19 @@ class _SiteMapPageState extends State<SiteMapPage> {
                   label: const Text('Code kopieren'),
                 ),
               const SizedBox(width: 8),
+              IconButton(
+                onPressed: () => setState(() {
+                  managing = !managing;
+                  if (managing) calibrating = false;
+                }),
+                tooltip: managing ? 'Sperrmodus beenden' : 'Stellplätze verwalten',
+                icon: Icon(managing ? Icons.lock_open : Icons.lock_outline),
+              ),
               FilledButton.tonalIcon(
-                onPressed: () => setState(() => calibrating = !calibrating),
+                onPressed: () => setState(() {
+                  calibrating = !calibrating;
+                  if (calibrating) managing = false;
+                }),
                 icon: Icon(calibrating ? Icons.check : Icons.tune),
                 label: Text(calibrating ? 'Fertig' : 'Kalibrieren'),
               ),
@@ -80,7 +101,12 @@ class _SiteMapPageState extends State<SiteMapPage> {
                 sites: widget.sites,
                 anchors: anchors,
                 calibrating: calibrating,
-                onSiteTap: widget.onSiteTap,
+                onSiteTap: managing
+                  ? (number) => widget.onManageSite(
+                      widget.sites.firstWhere((site) => site.number == number),
+                    )
+                  : widget.onSiteTap,
+                managing: managing,
                 onAnchorDragged: (siteNumber, position) {
                   setState(() => anchors[siteNumber] = position);
                 },
@@ -110,13 +136,14 @@ class _SiteMapPageState extends State<SiteMapPage> {
   }
 }
 
-class _SitePlanImage extends StatelessWidget {
+class _SitePlanImage extends StatefulWidget {
   const _SitePlanImage({
     required this.bookings,
     required this.sites,
     required this.anchors,
     required this.calibrating,
     required this.onSiteTap,
+    required this.managing,
     required this.onAnchorDragged,
   });
 
@@ -125,10 +152,26 @@ class _SitePlanImage extends StatelessWidget {
   final Map<int, Offset> anchors;
   final bool calibrating;
   final ValueChanged<int> onSiteTap;
+  final bool managing;
   final void Function(int siteNumber, Offset position) onAnchorDragged;
 
   @override
+  State<_SitePlanImage> createState() => _SitePlanImageState();
+}
+
+class _SitePlanImageState extends State<_SitePlanImage> {
+  bool imageFailed = false;
+
+  @override
   Widget build(BuildContext context) {
+    if (imageFailed) {
+      return _SiteGrid(
+        bookings: widget.bookings,
+        sites: widget.sites,
+        onSiteTap: widget.onSiteTap,
+        managing: widget.managing,
+      );
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         final availableWidth = constraints.maxWidth;
@@ -149,26 +192,27 @@ class _SitePlanImage extends StatelessWidget {
                 'assets/Lageplan.jpg',
                 fit: BoxFit.contain,
                 errorBuilder: (context, error, stackTrace) {
-                  return _SiteGrid(
-                    bookings: bookings,
-                    sites: sites,
-                    onSiteTap: onSiteTap,
-                  );
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) setState(() => imageFailed = true);
+                  });
+                  return const SizedBox.shrink();
                 },
               ),
-              for (final site in sites)
+              for (final site in widget.sites)
                 _ImageSiteOverlay(
                   site: site,
                   booking: _bookingFor(site.number),
                   color: site.color,
                   disabled: _isDisabled(site, _bookingFor(site.number)),
-                  position: anchors[site.number] ?? const Offset(0.5, 0.5),
+                  managing: widget.managing,
+                  position: widget.anchors[site.number] ?? const Offset(0.5, 0.5),
                   imageSize: imageSize,
                   horizontalOffset: horizontalOffset,
                   verticalOffset: verticalOffset,
-                  calibrating: calibrating,
-                  onSiteTap: onSiteTap,
-                  onDragged: (position) => onAnchorDragged(site.number, position),
+                  calibrating: widget.calibrating,
+                  onSiteTap: widget.onSiteTap,
+                  onDragged: (position) =>
+                      widget.onAnchorDragged(site.number, position),
                 ),
             ],
           ),
@@ -178,8 +222,8 @@ class _SitePlanImage extends StatelessWidget {
   }
 
   Booking? _bookingFor(int siteNumber) {
-    for (final booking in bookings) {
-      if (booking.siteNumber == siteNumber) {
+    for (final booking in widget.bookings) {
+      if (booking.siteNumber == siteNumber && _bookingOccupiesToday(booking)) {
         return booking;
       }
     }
@@ -200,6 +244,7 @@ class _ImageSiteOverlay extends StatelessWidget {
     required this.booking,
     required this.color,
     required this.disabled,
+    required this.managing,
     required this.position,
     required this.imageSize,
     required this.horizontalOffset,
@@ -213,6 +258,7 @@ class _ImageSiteOverlay extends StatelessWidget {
   final Booking? booking;
   final Color color;
   final bool disabled;
+  final bool managing;
   final Offset position;
   final double imageSize;
   final double horizontalOffset;
@@ -223,15 +269,13 @@ class _ImageSiteOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final statusColor = booking != null
-        ? const Color(0xffd69b32)
-        : site.status == 'Belegt'
-            ? const Color(0xffc65b54)
-                : site.status == 'Reserviert'
-                ? const Color(0xffd69b32)
-                : site.status == 'Gesperrt'
-                ? const Color(0xff777f86)
-                : const Color(0xff32866d);
+    final statusColor = site.status == 'Gesperrt'
+      ? const Color(0xff777f86)
+      : booking != null || site.status == 'Belegt'
+        ? const Color(0xffc65b54)
+        : site.status == 'Reserviert'
+          ? const Color(0xffd69b32)
+          : const Color(0xff32866d);
 
     final marker = DecoratedBox(
       decoration: BoxDecoration(
@@ -241,11 +285,7 @@ class _ImageSiteOverlay extends StatelessWidget {
                 ? const Color(0xffb8bec3).withValues(alpha: 0.6)
                 : color.withValues(alpha: 0.22),
         border: Border.all(
-          color: calibrating
-              ? const Color(0xff1f6f68)
-              : disabled
-                  ? const Color(0xff777f86)
-                  : statusColor,
+          color: calibrating ? const Color(0xff1f6f68) : statusColor,
           width: 2,
         ),
         borderRadius: BorderRadius.circular(6),
@@ -276,7 +316,9 @@ class _ImageSiteOverlay extends StatelessWidget {
               child: marker,
             )
           : InkWell(
-              onTap: disabled ? null : () => onSiteTap(site.number),
+              onTap: disabled && !managing
+                ? null
+                : () => onSiteTap(site.number),
               child: marker,
             ),
     );
@@ -288,11 +330,13 @@ class _SiteGrid extends StatelessWidget {
     required this.bookings,
     required this.sites,
     required this.onSiteTap,
+    required this.managing,
   });
 
   final List<Booking> bookings;
   final List<CampSite> sites;
   final ValueChanged<int> onSiteTap;
+  final bool managing;
 
   @override
   Widget build(BuildContext context) {
@@ -313,6 +357,7 @@ class _SiteGrid extends StatelessWidget {
               site.status == 'Gesperrt' ||
               (_bookingFor(site.number) != null &&
                     _bookingOccupiesToday(_bookingFor(site.number)!)),
+            managing: managing,
             onSiteTap: onSiteTap,
           ),
       ],
@@ -321,7 +366,7 @@ class _SiteGrid extends StatelessWidget {
 
   Booking? _bookingFor(int siteNumber) {
     for (final booking in bookings) {
-      if (booking.siteNumber == siteNumber) {
+      if (booking.siteNumber == siteNumber && _bookingOccupiesToday(booking)) {
         return booking;
       }
     }
@@ -335,6 +380,7 @@ class _SiteTile extends StatelessWidget {
     required this.booking,
     required this.color,
     required this.disabled,
+    required this.managing,
     required this.onSiteTap,
   });
 
@@ -342,12 +388,13 @@ class _SiteTile extends StatelessWidget {
   final Booking? booking;
   final Color color;
   final bool disabled;
+  final bool managing;
   final ValueChanged<int> onSiteTap;
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: disabled ? null : () => onSiteTap(site.number),
+      onTap: disabled && !managing ? null : () => onSiteTap(site.number),
       borderRadius: BorderRadius.circular(12),
       child: Ink(
         decoration: BoxDecoration(

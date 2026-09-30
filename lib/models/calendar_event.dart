@@ -19,6 +19,8 @@ class CalendarEvent {
     required this.time,
     required this.category,
     this.recurrence = CalendarEventRecurrence.none,
+    this.monthlyWeek,
+    this.monthlyWeekday,
   });
 
   final String? id;
@@ -27,6 +29,8 @@ class CalendarEvent {
   final String time;
   final CalendarEventCategory category;
   final CalendarEventRecurrence recurrence;
+  final int? monthlyWeek;
+  final int? monthlyWeekday;
 
   CalendarEvent copyWith({String? id}) {
     return CalendarEvent(
@@ -36,6 +40,8 @@ class CalendarEvent {
       time: time,
       category: category,
       recurrence: recurrence,
+      monthlyWeek: monthlyWeek,
+      monthlyWeekday: monthlyWeekday,
     );
   }
 

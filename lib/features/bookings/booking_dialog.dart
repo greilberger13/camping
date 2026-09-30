@@ -4,6 +4,8 @@ import '../../core/camping_dates.dart';
 import '../../models/booking.dart';
 import '../../models/camp_site.dart';
 import '../../models/vehicle_type.dart';
+import '../../services/booking_availability.dart';
+import '../site_map/site_picker_dialog.dart';
 import 'birth_date_dialog.dart';
 
 String _formatInitialDate(DateTime date) {
@@ -43,9 +45,13 @@ class _BookingDialogState extends State<BookingDialog> {
     text: _formatInitialDate(CampingDates.defaultDeparture),
   );
   bool dog = false;
-  int guests = 2;
+  bool electricity = false;
+  bool lateCheckout = false;
+  int adults = 2;
+  int children = 0;
   int? siteNumber;
   VehicleType vehicleType = VehicleType.motorhome;
+  static const availability = BookingAvailability();
 
   @override
   void initState() {
@@ -58,8 +64,11 @@ class _BookingDialogState extends State<BookingDialog> {
       phoneController.text = booking.phone ?? '';
       arrivalController.text = booking.arrival;
       departureController.text = booking.departure;
-      guests = booking.guests;
+      adults = booking.adults;
+      children = booking.children;
       dog = booking.hasDog;
+      electricity = booking.hasElectricity;
+      lateCheckout = booking.lateCheckout;
       siteNumber = booking.siteNumber;
       vehicleType = booking.vehicleType;
     } else if (widget.initialSiteNumber != null) {
@@ -179,26 +188,12 @@ class _BookingDialogState extends State<BookingDialog> {
                 ),
               ]),
               const SizedBox(height: 12),
-              Row(children: [
-                const Text('Personen'),
-                const Spacer(),
-                IconButton(onPressed: () => setState(() => guests = guests > 1 ? guests - 1 : 1), icon: const Icon(Icons.remove_circle_outline)),
-                Text('$guests'),
-                IconButton(onPressed: () => setState(() => guests++), icon: const Icon(Icons.add_circle_outline)),
-              ]),
-              DropdownButtonFormField<int>(
-                initialValue: siteNumber,
-                decoration: const InputDecoration(labelText: 'Stellplatz'),
-                items: [
-                  for (final site in _availableSites)
-                    DropdownMenuItem(
-                      value: site.number,
-                      child: Text('${site.number} · ${site.type}'),
-                    ),
-                ],
-                onChanged: (value) => setState(() => siteNumber = value),
-                validator: (value) => value == null ? 'Stellplatz auswählen' : null,
-              ),
+              _counter('Erwachsene', adults, 1, (value) {
+                setState(() => adults = value);
+              }),
+              _counter('Kinder', children, 0, (value) {
+                setState(() => children = value);
+              }),
               DropdownButtonFormField<VehicleType>(
                 initialValue: vehicleType,
                 decoration: const InputDecoration(labelText: 'Fahrzeugart'),
@@ -214,16 +209,56 @@ class _BookingDialogState extends State<BookingDialog> {
                     setState(() {
                       vehicleType = value;
                       if (siteNumber != null &&
-                          !_availableSites.any(
-                            (site) => site.number == siteNumber,
-                          )) {
+                          !_siteIsAvailable(siteNumber!)) {
                         siteNumber = null;
                       }
                     });
                   }
                 },
               ),
-              SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Hund'), value: dog, onChanged: (value) => setState(() => dog = value)),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      key: ValueKey(siteNumber),
+                      initialValue: siteNumber == null ? '' : 'Platz $siteNumber',
+                      readOnly: true,
+                      decoration: const InputDecoration(labelText: 'Stellplatz'),
+                        validator: (_) => siteNumber == null
+                          ? 'Stellplatz auswählen'
+                          : !_siteIsAvailable(siteNumber!)
+                            ? 'Stellplatz nicht verfügbar'
+                            : null,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _openSitePicker,
+                    tooltip: 'Stellplatz im Platzplan auswählen',
+                    icon: const Icon(Icons.map_outlined),
+                  ),
+                ],
+              ),
+              if (_lateCheckoutWarning)
+                const Text('Achtung: Late-Check-Out am Anreisetag.'),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Hund'),
+                value: dog,
+                onChanged: (value) => setState(() => dog = value),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Strom'),
+                value: electricity,
+                onChanged: (value) => setState(() => electricity = value),
+              ),
+              if (widget.initialBooking != null)
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Late-Check-Out'),
+                  value: lateCheckout,
+                  onChanged: (value) => setState(() => lateCheckout = value),
+                ),
             ]),
           ),
         ),
@@ -236,8 +271,11 @@ class _BookingDialogState extends State<BookingDialog> {
                   guestName: nameController.text.trim(),
                   arrival: arrivalController.text.trim(),
                   departure: departureController.text.trim(),
-                  guests: guests,
+                  adults: adults,
+                  children: children,
                   hasDog: dog,
+                  hasElectricity: electricity,
+                  lateCheckout: lateCheckout,
                   siteNumber: siteNumber!,
                   vehicleType: vehicleType,
                   address: _optionalValue(addressController),
@@ -278,9 +316,9 @@ class _BookingDialogState extends State<BookingDialog> {
   }) async {
     final selectedDate = await showDatePicker(
       context: context,
-      initialDate: initialDate,
+      initialDate: _parseDate(controller.text) ?? initialDate,
       firstDate: DateTime(2025),
-      lastDate: DateTime(2035),
+      lastDate: DateTime(2100),
       helpText: 'Datum auswählen',
     );
 
@@ -327,16 +365,61 @@ class _BookingDialogState extends State<BookingDialog> {
     return parsed;
   }
 
-  List<CampSite> get _availableSites {
-    return widget.sites
-        .where(
-          (site) =>
-              (site.status == 'Frei' || site.number == widget.initialSiteNumber) &&
-              site.supportsVehicleType(vehicleType) &&
-              _siteIsAvailable(site.number),
-        )
-        .toList();
+  Widget _counter(
+    String label,
+    int value,
+    int minimum,
+    ValueChanged<int> onChanged,
+  ) {
+    return Row(
+      children: [
+        Text(label),
+        const Spacer(),
+        IconButton(
+          onPressed: value > minimum ? () => onChanged(value - 1) : null,
+          icon: const Icon(Icons.remove_circle_outline),
+        ),
+        Text('$value'),
+        IconButton(
+          onPressed: () => onChanged(value + 1),
+          icon: const Icon(Icons.add_circle_outline),
+        ),
+      ],
+    );
   }
+
+  Future<void> _openSitePicker() async {
+    final arrival = _parseDate(arrivalController.text);
+    final departure = _parseDate(departureController.text);
+    if (arrival == null || departure == null || departure.isBefore(arrival)) {
+      formKey.currentState?.validate();
+      return;
+    }
+    final result = await showDialog<SiteSelection>(
+      context: context,
+      builder: (context) => SitePickerDialog(
+        sites: widget.sites,
+        bookings: widget.existingBookings,
+        vehicleType: vehicleType,
+        arrival: arrival,
+        departure: departure,
+        bookingId: widget.initialBooking?.id,
+        initialSiteNumber: siteNumber,
+      ),
+    );
+    if (result == null) return;
+    setState(() {
+      arrivalController.text = _formatDate(result.arrival);
+      departureController.text = _formatDate(result.departure);
+      siteNumber = result.siteNumber;
+    });
+  }
+
+  bool get _lateCheckoutWarning => siteNumber != null &&
+      availability.hasLateCheckoutWarning(
+        _draft(siteNumber!),
+        widget.existingBookings,
+      );
 
   VehicleType _vehicleTypeFor(CampSite site) {
     switch (site.type) {
@@ -351,29 +434,30 @@ class _BookingDialogState extends State<BookingDialog> {
     }
   }
 
-  bool _siteIsAvailable(int number) {
-    final arrival = _parseDate(arrivalController.text);
-    final departure = _parseDate(departureController.text);
-    if (arrival == null || departure == null) {
-      return false;
-    }
-
-    final draft = Booking(
+  Booking _draft(int number) {
+    return Booking(
+      id: widget.initialBooking?.id,
       guestName: '',
       arrival: arrivalController.text,
       departure: departureController.text,
-      guests: guests,
+      adults: adults,
+      children: children,
       hasDog: dog,
       siteNumber: number,
       vehicleType: vehicleType,
     );
+  }
 
-    if (departure.isBefore(arrival)) {
-      return false;
-    }
-
-    return widget.existingBookings.every(
-      (booking) => !draft.conflictsWith(booking),
+  bool _siteIsAvailable(int number) {
+    final sites = widget.sites.where((site) => site.number == number);
+    return sites.isNotEmpty && availability.isAvailable(
+      _draft(number),
+      sites.first,
+      [
+        ...widget.existingBookings,
+        if (widget.initialBooking != null) widget.initialBooking!,
+      ],
+      allowExistingBlocked: true,
     );
   }
 }

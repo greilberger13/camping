@@ -14,14 +14,22 @@ class InvoiceLine {
 
 class Invoice {
   const Invoice({
+    this.id,
+    this.bookingId,
     required this.guestName,
     required this.siteNumber,
     required this.lines,
+    this.isPaid = false,
+    this.paymentMethod,
   });
 
+  final String? id;
+  final String? bookingId;
   final String guestName;
   final int siteNumber;
   final List<InvoiceLine> lines;
+  final bool isPaid;
+  final String? paymentMethod;
 
   double get total => lines.fold(0, (sum, line) => sum + line.total);
 }

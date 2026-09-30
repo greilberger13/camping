@@ -6,26 +6,35 @@ class Booking {
     required this.guestName,
     required this.arrival,
     required this.departure,
-    required this.guests,
+    int? guests,
+    int? adults,
+    this.children = 0,
     required this.hasDog,
+    this.hasElectricity = false,
+    this.lateCheckout = false,
     required this.siteNumber,
     this.vehicleType = VehicleType.motorhome,
     this.address,
     this.birthDate,
     this.phone,
-  });
+  }) : adults = adults ?? guests ?? 1;
 
   final String? id;
   final String guestName;
   final String arrival;
   final String departure;
-  final int guests;
+  final int adults;
+  final int children;
   final bool hasDog;
+  final bool hasElectricity;
+  final bool lateCheckout;
   final int siteNumber;
   final VehicleType vehicleType;
   final String? address;
   final String? birthDate;
   final String? phone;
+
+  int get guests => adults + children;
 
   Booking copyWith({String? id}) {
     return Booking(
@@ -33,8 +42,11 @@ class Booking {
       guestName: guestName,
       arrival: arrival,
       departure: departure,
-      guests: guests,
+      adults: adults,
+      children: children,
       hasDog: hasDog,
+      hasElectricity: hasElectricity,
+      lateCheckout: lateCheckout,
       siteNumber: siteNumber,
       vehicleType: vehicleType,
       address: address,
@@ -48,7 +60,8 @@ class Booking {
   DateTime? get departureDate => _parseDate(departure);
 
   bool conflictsWith(Booking other) {
-    if (siteNumber != other.siteNumber) {
+    if (siteNumber != other.siteNumber ||
+        (id != null && id == other.id)) {
       return false;
     }
 

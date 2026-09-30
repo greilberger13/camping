@@ -7,6 +7,7 @@ enum TaskCategory {
 class CampingTask {
   const CampingTask({
     this.id,
+    this.taskKey,
     required this.title,
     required this.quantity,
     required this.category,
@@ -14,14 +15,18 @@ class CampingTask {
   });
 
   final String? id;
+  final String? taskKey;
   final String title;
   final String quantity;
   final TaskCategory category;
   final bool isDone;
 
+  bool get isAutomatic => taskKey?.startsWith('order:') ?? false;
+
   CampingTask copyWith({String? id, bool? isDone}) {
     return CampingTask(
       id: id ?? this.id,
+      taskKey: taskKey,
       title: title,
       quantity: quantity,
       category: category,

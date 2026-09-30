@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/camping_dates.dart';
 import '../../models/calendar_event.dart';
 import '../../services/calendar_event_repository.dart';
+import '../../services/calendar_recurrence_service.dart';
 import '../../shared/widgets/page_frame.dart';
 
 String _formatCalendarDate(DateTime date) {
@@ -22,12 +23,13 @@ class CalendarPage extends StatefulWidget {
 
 class _CalendarPageState extends State<CalendarPage> {
   DateTime selectedMonth = CampingDates.operationalDay;
+  static const recurrenceService = CalendarRecurrenceService();
 
   List<CalendarEvent> get events => widget.repository.events;
 
   @override
   Widget build(BuildContext context) {
-    final visibleEvents = _visibleEvents;
+    final visibleEvents = recurrenceService.inMonth(events, selectedMonth);
 
     return PageFrame(
       title: 'Kalender',
@@ -69,89 +71,6 @@ class _CalendarPageState extends State<CalendarPage> {
     );
   }
 
-  List<_CalendarDisplayEvent> get _visibleEvents {
-    final result = <_CalendarDisplayEvent>[];
-    for (final event in events) {
-      if (_isInSelectedMonth(event)) {
-        result.add(_CalendarDisplayEvent(source: event, displayed: event));
-      }
-      for (final occurrence in _occurrencesInSelectedMonth(event)) {
-        if (_isInSelectedMonth(occurrence)) {
-          result.add(
-            _CalendarDisplayEvent(
-              source: event,
-              displayed: occurrence,
-              isOccurrence: true,
-            ),
-          );
-        }
-      }
-    }
-    return result;
-  }
-
-  List<CalendarEvent> _occurrencesInSelectedMonth(CalendarEvent event) {
-    if (event.recurrence == CalendarEventRecurrence.none) {
-      return [];
-    }
-
-    final baseDate = _parseDate(event.date);
-    if (baseDate == null) {
-      return [];
-    }
-
-    final monthStart = DateTime(selectedMonth.year, selectedMonth.month, 1);
-    final monthEnd = DateTime(selectedMonth.year, selectedMonth.month + 1, 0);
-    final occurrences = <CalendarEvent>[];
-
-    if (event.recurrence == CalendarEventRecurrence.weekly) {
-      var date = baseDate;
-      if (date.isBefore(monthStart)) {
-        final days = monthStart.difference(date).inDays;
-        date = date.add(Duration(days: ((days + 6) ~/ 7) * 7));
-      }
-      while (!date.isAfter(monthEnd)) {
-        if (!date.isBefore(monthStart)) {
-          occurrences.add(_eventAtDate(event, date));
-        }
-        date = date.add(const Duration(days: 7));
-      }
-    } else {
-      final date = _addMonthForYear(baseDate, selectedMonth.year, selectedMonth.month);
-      if (date != null && !date.isBefore(monthStart) && !date.isAfter(monthEnd)) {
-        occurrences.add(_eventAtDate(event, date));
-      }
-    }
-
-    return occurrences;
-  }
-
-  CalendarEvent _eventAtDate(CalendarEvent event, DateTime date) {
-    return CalendarEvent(
-      title: event.title,
-      date: _formatDate(date),
-      time: event.time,
-      category: event.category,
-      recurrence: event.recurrence,
-    );
-  }
-
-  DateTime? _addMonthForYear(DateTime base, int year, int month) {
-    final targetMonth = DateTime(year, month, 1);
-    if (targetMonth.isBefore(DateTime(base.year, base.month, 1))) {
-      return null;
-    }
-    final lastDay = DateTime(year, month + 1, 0).day;
-    return DateTime(year, month, base.day.clamp(1, lastDay).toInt());
-  }
-
-  bool _isInSelectedMonth(CalendarEvent event) {
-    final date = _parseDate(event.date);
-    return date != null &&
-        date.year == selectedMonth.year &&
-        date.month == selectedMonth.month;
-  }
-
   void _moveMonth(int amount) {
     setState(() {
       selectedMonth = DateTime(
@@ -161,29 +80,6 @@ class _CalendarPageState extends State<CalendarPage> {
     });
   }
 
-
-  DateTime? _parseDate(String value) {
-    final parts = value.split('.');
-    if (parts.length != 3) {
-      return null;
-    }
-    final day = int.tryParse(parts[0]);
-    final month = int.tryParse(parts[1]);
-    final year = int.tryParse(parts[2]);
-    if (day == null || month == null || year == null) {
-      return null;
-    }
-    final parsed = DateTime(year, month, day);
-    if (parsed.year != year || parsed.month != month || parsed.day != day) {
-      return null;
-    }
-
-    return parsed;
-  }
-
-  String _formatDate(DateTime date) {
-    return _formatCalendarDate(date);
-  }
 
   Future<void> _addEvent() async {
     final event = await showDialog<CalendarEvent>(
@@ -217,8 +113,12 @@ class _CalendarPageState extends State<CalendarPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Termin löschen?'),
-        content: Text('„${event.title}“ aus dem Kalender entfernen?'),
+        title: Text(event.recurrence == CalendarEventRecurrence.none
+          ? 'Termin löschen?'
+          : 'Ganze Terminserie löschen?'),
+        content: Text(event.recurrence == CalendarEventRecurrence.none
+          ? '„${event.title}“ aus dem Kalender entfernen?'
+          : 'Alle Vorkommen von „${event.title}“ entfernen?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -243,18 +143,6 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 }
 
-class _CalendarDisplayEvent {
-  const _CalendarDisplayEvent({
-    required this.source,
-    required this.displayed,
-    this.isOccurrence = false,
-  });
-
-  final CalendarEvent source;
-  final CalendarEvent displayed;
-  final bool isOccurrence;
-}
-
 class _CalendarMonthGrid extends StatelessWidget {
   const _CalendarMonthGrid({
     required this.month,
@@ -263,8 +151,8 @@ class _CalendarMonthGrid extends StatelessWidget {
   });
 
   final DateTime month;
-  final List<_CalendarDisplayEvent> events;
-  final ValueChanged<_CalendarDisplayEvent> onEventTap;
+  final List<CalendarOccurrence> events;
+  final ValueChanged<CalendarOccurrence> onEventTap;
 
   @override
   Widget build(BuildContext context) {
@@ -555,6 +443,8 @@ class _CalendarEventDialogState extends State<_CalendarEventDialog> {
   final timeController = TextEditingController(text: '10:00');
   CalendarEventCategory category = CalendarEventCategory.event;
   CalendarEventRecurrence recurrence = CalendarEventRecurrence.none;
+  int monthlyWeek = 1;
+  int monthlyWeekday = DateTime.monday;
 
   @override
   void initState() {
@@ -566,6 +456,8 @@ class _CalendarEventDialogState extends State<_CalendarEventDialog> {
       timeController.text = event.time;
       category = event.category;
       recurrence = event.recurrence;
+      monthlyWeek = event.monthlyWeek ?? 1;
+      monthlyWeekday = event.monthlyWeekday ?? DateTime.monday;
     }
   }
 
@@ -580,7 +472,11 @@ class _CalendarEventDialogState extends State<_CalendarEventDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.event == null ? 'Neuer Termin' : 'Termin bearbeiten'),
+        title: Text(widget.event == null
+          ? 'Neuer Termin'
+          : widget.event!.recurrence == CalendarEventRecurrence.none
+            ? 'Termin bearbeiten'
+            : 'Ganze Terminserie bearbeiten'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -624,6 +520,43 @@ class _CalendarEventDialogState extends State<_CalendarEventDialog> {
                 }
               },
             ),
+            if (recurrence == CalendarEventRecurrence.monthly) ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<int>(
+                initialValue: monthlyWeek,
+                decoration: const InputDecoration(labelText: 'Woche im Monat'),
+                items: [
+                  for (final week in [1, 2, 3, 4, 5, -1])
+                    DropdownMenuItem(
+                      value: week,
+                      child: Text(week == -1 ? 'Letzte' : '$week.'),
+                    ),
+                ],
+                onChanged: (value) {
+                  if (value != null) setState(() => monthlyWeek = value);
+                },
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<int>(
+                initialValue: monthlyWeekday,
+                decoration: const InputDecoration(labelText: 'Wochentag'),
+                items: [
+                  for (var weekday = 1; weekday <= 7; weekday++)
+                    DropdownMenuItem(
+                      value: weekday,
+                      child: Text(
+                        const [
+                          'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag',
+                          'Freitag', 'Samstag', 'Sonntag',
+                        ][weekday - 1],
+                      ),
+                    ),
+                ],
+                onChanged: (value) {
+                  if (value != null) setState(() => monthlyWeekday = value);
+                },
+              ),
+            ],
             const SizedBox(height: 12),
             Row(
               children: [
@@ -674,6 +607,12 @@ class _CalendarEventDialogState extends State<_CalendarEventDialog> {
                 time: timeController.text.trim(),
                 category: category,
                 recurrence: recurrence,
+                monthlyWeek: recurrence == CalendarEventRecurrence.monthly
+                  ? monthlyWeek
+                  : null,
+                monthlyWeekday: recurrence == CalendarEventRecurrence.monthly
+                  ? monthlyWeekday
+                  : null,
               ),
             );
           },

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/supabase_config.dart';
 import '../../core/supabase_database.dart';
 import '../../models/booking.dart';
+import '../../models/camp_site.dart';
 import '../../models/calendar_event.dart';
 import '../../models/order.dart';
 import '../../models/order_batch.dart';
@@ -14,9 +15,15 @@ import '../../models/task.dart';
 import '../../services/booking_repository.dart';
 import '../../services/supabase_booking_repository.dart';
 import '../../services/in_memory_booking_repository.dart';
+import '../../services/in_memory_invoice_repository.dart';
 import '../../services/in_memory_order_repository.dart';
+import '../../services/in_memory_pricing_repository.dart';
+import '../../services/invoice_repository.dart';
 import '../../services/order_repository.dart';
+import '../../services/pricing_repository.dart';
+import '../../services/supabase_invoice_repository.dart';
 import '../../services/supabase_order_repository.dart';
+import '../../services/supabase_pricing_repository.dart';
 import '../../services/in_memory_stay_note_repository.dart';
 import '../../services/stay_note_repository.dart';
 import '../../services/supabase_stay_note_repository.dart';
@@ -31,9 +38,11 @@ import '../../services/in_memory_calendar_event_repository.dart';
 import '../../services/supabase_calendar_event_repository.dart';
 import '../bookings/booking_dialog.dart';
 import '../bookings/bookings_page.dart';
+import '../bookings/bookings_stays_page.dart';
 import '../calendar/calendar_page.dart';
 import '../checkout/checkout_page.dart';
 import '../dashboard/dashboard_page.dart';
+import '../settings/settings_page.dart';
 import '../site_map/site_map_page.dart';
 import '../statistics/statistics_page.dart';
 import '../stays/stays_page.dart';
@@ -86,7 +95,9 @@ class _CampingHomePageState extends State<CampingHomePage> {
       ),
     ],
   );
-  final Map<int, bool> electricityBySite = {5: true, 22: false};
+  late PricingRepository pricingRepository;
+  late InvoiceRepository invoiceRepository;
+  String connectionStatus = 'Lokal';
   late StayNoteRepository noteRepository;
   late CalendarEventRepository calendarRepository;
   late SiteRepository siteRepository;
@@ -100,8 +111,13 @@ class _CampingHomePageState extends State<CampingHomePage> {
   @override
   void initState() {
     super.initState();
-    bookingRepository = InMemoryBookingRepository();
+    siteRepository = InMemorySiteRepository();
+    bookingRepository = InMemoryBookingRepository(
+      sites: () => siteRepository.sites,
+    );
     orderRepository = localOrderRepository;
+    pricingRepository = InMemoryPricingRepository();
+    invoiceRepository = InMemoryInvoiceRepository();
     noteRepository = InMemoryStayNoteRepository();
     calendarRepository = InMemoryCalendarEventRepository(
       initial: const [
@@ -125,12 +141,12 @@ class _CampingHomePageState extends State<CampingHomePage> {
         ),
       ],
     );
-    siteRepository = InMemorySiteRepository();
     taskRepository = InMemoryTaskRepository(
       initial: const [
         CampingTask(title: 'Müllsäcke einkaufen', quantity: 'Campingbedarf', category: TaskCategory.camping),
       ],
     );
+    unawaited(taskRepository.syncOrders(orders));
     unawaited(_initializeRemoteRepositories());
   }
 
@@ -138,7 +154,6 @@ class _CampingHomePageState extends State<CampingHomePage> {
     ('Heute', Icons.today_outlined),
     ('Buchungen', Icons.calendar_month_outlined),
     ('Platzplan', Icons.map_outlined),
-    ('Aufenthalt', Icons.room_service_outlined),
     ('Abreise', Icons.logout_outlined),
     ('Aufgaben', Icons.checklist_outlined),
     ('Statistik', Icons.bar_chart_outlined),
@@ -155,6 +170,10 @@ class _CampingHomePageState extends State<CampingHomePage> {
           appBar: AppBar(
             title: const Text('Peterbauer Camping'),
             actions: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Center(child: Text(connectionStatus)),
+              ),
               IconButton(
                 onPressed: () {},
                 icon: const Icon(Icons.notifications_none),
@@ -170,15 +189,24 @@ class _CampingHomePageState extends State<CampingHomePage> {
             ],
           ),
           drawer: wide ? null : Drawer(child: _navigation(context)),
-          body: Row(
-            children: [
-              if (wide) SizedBox(width: 224, child: _navigation(context)),
-              Expanded(child: _page(context)),
-            ],
-          ),
+          body: connectionStatus == 'Verbinde ...'
+              ? const Center(
+                  child: CircularProgressIndicator(
+                    semanticsLabel: 'Datenbank wird verbunden',
+                  ),
+                )
+              : Row(
+                  children: [
+                    if (wide)
+                      SizedBox(width: 224, child: _navigation(context)),
+                    Expanded(child: _page(context)),
+                  ],
+                ),
           floatingActionButton: selected == 1
               ? FloatingActionButton.extended(
-                  onPressed: _openBookingForm,
+                    onPressed: connectionStatus == 'Verbinde ...'
+                      ? null
+                      : () => unawaited(_perform(_openBookingForm)),
                   icon: const Icon(Icons.add),
                   label: const Text('Buchung'),
                 )
@@ -222,9 +250,14 @@ class _CampingHomePageState extends State<CampingHomePage> {
               ),
             const Spacer(),
             const Divider(indent: 18, endIndent: 18),
-            const ListTile(
+            ListTile(
+              selected: selected == 7,
               leading: Icon(Icons.settings_outlined),
               title: Text('Einstellungen'),
+              onTap: () {
+                setState(() => selected = 7);
+                if (Scaffold.of(context).hasDrawer) Navigator.pop(context);
+              },
             ),
             const SizedBox(height: 12),
           ],
@@ -236,63 +269,101 @@ class _CampingHomePageState extends State<CampingHomePage> {
   Widget _page(BuildContext context) {
     switch (selected) {
       case 1:
-        return BookingsPage(
-          bookings: newBookings,
-          onDelete: (booking) {
-            unawaited(_deleteBooking(booking));
-          },
-          onEdit: _editBooking,
+        return BookingsStaysPage(
+          bookings: BookingsPage(
+            bookings: newBookings,
+            onDelete: (booking) => unawaited(
+              _perform(() => _deleteBooking(booking)),
+            ),
+            onEdit: (booking) => unawaited(
+              _perform(() => _editBooking(booking)),
+            ),
+          ),
+          stays: StaysPage(
+            bookings: newBookings,
+            orders: orders,
+            products: products,
+            onOrderBatchAdded: (batch) => unawaited(
+              _perform(() => _addOrderBatch(batch)),
+            ),
+            onOrderUpdated: (order) => unawaited(
+              _perform(() => _updateOrder(order)),
+            ),
+            notes: notes,
+            onNoteAdded: (note) => unawaited(
+              _perform(() => _addNote(note)),
+            ),
+            onNoteDeleted: (note) => unawaited(
+              _perform(() => _deleteNote(note)),
+            ),
+          ),
         );
       case 2:
         return SiteMapPage(
           bookings: newBookings,
           sites: siteRepository.sites,
-          onSiteTap: _openBookingForSite,
+          onSiteTap: (number) => unawaited(
+            _perform(() => _openBookingForSite(number)),
+          ),
+          onManageSite: (site) => unawaited(
+            _perform(() => _manageSite(site)),
+          ),
         );
       case 3:
-        return StaysPage(
-          bookings: newBookings,
-          orders: orders,
-          products: products,
-          electricityBySite: electricityBySite,
-          onOrderBatchAdded: (batch) => unawaited(_addOrderBatch(batch)),
-          onOrderUpdated: (order) => unawaited(_updateOrder(order)),
-          onProductAdded: (product) => unawaited(_addProduct(product)),
-          onProductUpdated: (product) => unawaited(_updateProduct(product)),
-          onProductDeleted: (productId) => unawaited(_deleteProduct(productId)),
-          notes: notes,
-          onNoteAdded: (note) => unawaited(_addNote(note)),
-          onNoteDeleted: (note) => unawaited(_deleteNote(note)),
-          onElectricityChanged: (siteNumber, enabled) {
-            setState(() => electricityBySite[siteNumber] = enabled);
-          },
-        );
-      case 4:
         return CheckoutPage(
           bookings: newBookings,
           orders: orders,
-          electricityBySite: electricityBySite,
+          pricing: pricingRepository.current,
+          invoiceRepository: invoiceRepository,
+        );
+      case 4:
+        return TasksPage(
+          tasks: taskRepository.tasks,
+          onTaskAdded: (task) => unawaited(
+            _perform(() => _addTask(task)),
+          ),
+          onTaskCompleted: (task) => unawaited(
+            _perform(() => _completeTask(task)),
+          ),
         );
       case 5:
-        return TasksPage(
-          orders: orders,
-          tasks: taskRepository.tasks,
-          onTaskAdded: (task) => unawaited(_addTask(task)),
-          onTaskUpdated: (task) => unawaited(_updateTask(task)),
-          onOrderUpdated: (order) => unawaited(_updateOrder(order)),
-        );
-      case 6:
         return StatisticsPage(bookings: newBookings);
-      case 7:
+      case 6:
         return CalendarPage(repository: calendarRepository);
+      case 7:
+        return SettingsPage(
+          pricing: pricingRepository.current,
+          products: products,
+          onSavePricing: (pricing) async {
+            await pricingRepository.save(pricing);
+            if (mounted) setState(() {});
+          },
+          onCreateProduct: _addProduct,
+          onUpdateProduct: _updateProduct,
+          onDeleteProduct: _deleteProduct,
+        );
       default:
         return DashboardPage(
           onMapTap: () => setState(() => selected = 2),
           onBookingTap: () => setState(() => selected = 1),
-          onStayTap: () => setState(() => selected = 3),
-          onCheckoutTap: () => setState(() => selected = 4),
+          onStayTap: () => setState(() => selected = 1),
+          onCheckoutTap: () => setState(() => selected = 3),
           bookings: newBookings,
         );
+    }
+  }
+
+  Future<void> _perform(Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (error) {
+      if (!mounted) return;
+      if (connectionStatus == 'Online') {
+        setState(() => connectionStatus = 'Remote-Fehler');
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Änderung nicht gespeichert: $error')),
+      );
     }
   }
 
@@ -327,11 +398,67 @@ class _CampingHomePageState extends State<CampingHomePage> {
     }
   }
 
+  Future<void> _manageSite(CampSite site) async {
+    final current = DateTime.now();
+    final today = DateTime(current.year, current.month, current.day);
+    final affected = newBookings.where(
+      (booking) => booking.siteNumber == site.number &&
+          booking.departureDate != null &&
+          !booking.departureDate!.isBefore(today),
+    ).toList();
+    final blocked = site.status == 'Gesperrt';
+    final decision = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Platz ${site.number}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SwitchListTile(
+              title: const Text('Gesperrt'),
+              value: blocked,
+              onChanged: (_) => Navigator.pop(context, 'toggle'),
+            ),
+            if (!blocked && affected.isNotEmpty)
+              Text(
+                '${affected.length} bestehende Buchung(en) bleiben erhalten. '
+                'Bitte bei Bedarf auf einen freien Stellplatz verlegen.',
+              ),
+            for (final booking in affected)
+              ListTile(
+                title: Text(booking.guestName),
+                subtitle: Text('${booking.arrival} – ${booking.departure}'),
+                trailing: const Icon(Icons.edit_outlined),
+                onTap: () => Navigator.pop(context, booking.id),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Schließen'),
+          ),
+        ],
+      ),
+    );
+    if (decision == 'toggle') {
+      await siteRepository.update(
+        site.copyWith(status: blocked ? 'Frei' : 'Gesperrt'),
+      );
+      if (mounted) setState(() {});
+    } else if (decision != null) {
+      final matches = affected.where((booking) => booking.id == decision);
+      if (matches.isNotEmpty && mounted) await _editBooking(matches.first);
+    }
+  }
+
   Future<void> _initializeRemoteRepositories() async {
     final config = SupabaseConfig.fromEnvironment();
     if (!config.isConfigured) {
       return;
     }
+
+    if (mounted) setState(() => connectionStatus = 'Verbinde ...');
 
     try {
       final database = await SupabaseDatabase.connect(config: config);
@@ -345,6 +472,8 @@ class _CampingHomePageState extends State<CampingHomePage> {
       final calendarRepository = SupabaseCalendarEventRepository(database);
       final siteRepository = SupabaseSiteRepository(database);
       final taskRepository = SupabaseTaskRepository(database);
+      final pricingRepository = SupabasePricingRepository(database);
+      final invoiceRepository = SupabaseInvoiceRepository(database);
       await bookingRepository.load();
       await orderRepository.loadProducts();
       await orderRepository.loadOrders();
@@ -352,6 +481,8 @@ class _CampingHomePageState extends State<CampingHomePage> {
       await calendarRepository.load();
       await siteRepository.load();
       await taskRepository.load();
+      await pricingRepository.load();
+      await invoiceRepository.load();
       if (!mounted) {
         return;
       }
@@ -362,9 +493,17 @@ class _CampingHomePageState extends State<CampingHomePage> {
         this.calendarRepository = calendarRepository;
         this.siteRepository = siteRepository;
         this.taskRepository = taskRepository;
+        this.pricingRepository = pricingRepository;
+        this.invoiceRepository = invoiceRepository;
+        connectionStatus = 'Online';
       });
-    } catch (_) {
-      // Keep the local fallback when the remote database is not reachable.
+    } catch (error) {
+      if (mounted) {
+        setState(() => connectionStatus = 'Offline · lokal');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Supabase nicht erreichbar: $error')),
+        );
+      }
     }
   }
 
@@ -408,11 +547,13 @@ class _CampingHomePageState extends State<CampingHomePage> {
 
   Future<void> _addOrderBatch(OrderBatch batch) async {
     await orderRepository.createOrderBatch(batch);
+    await taskRepository.syncOrders(orders);
     if (mounted) setState(() {});
   }
 
   Future<void> _updateOrder(Order order) async {
     await orderRepository.updateOrder(order);
+    await taskRepository.syncOrders(orders);
     if (mounted) setState(() {});
   }
 
@@ -436,8 +577,24 @@ class _CampingHomePageState extends State<CampingHomePage> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _updateTask(CampingTask task) async {
-    await taskRepository.update(task);
+  Future<void> _completeTask(CampingTask task) async {
+    if (task.isAutomatic && taskRepository is InMemoryTaskRepository) {
+      for (final order in orders.where((item) {
+        final key = item.productId == null
+            ? 'order:${item.category.name}:${item.description}'
+            : 'order:${item.productId}';
+        return key == task.taskKey && item.status == OrderStatus.open;
+      }).toList()) {
+        await orderRepository.updateOrder(
+          order.copyWith(status: OrderStatus.completed),
+        );
+      }
+    }
+    await taskRepository.complete(task);
+    if (task.isAutomatic) {
+      await orderRepository.loadOrders();
+      await taskRepository.syncOrders(orders);
+    }
     if (mounted) setState(() {});
   }
 }

@@ -1,20 +1,19 @@
 import 'package:flutter/material.dart';
 
+import '../../models/booking.dart';
 import '../../models/order.dart';
 import '../../models/order_batch.dart';
 import '../../models/order_product.dart';
 
 class BookingOrderDialog extends StatefulWidget {
   const BookingOrderDialog({
-    required this.siteNumber,
+    required this.booking,
     required this.products,
-    this.bookingId,
     super.key,
   });
 
-  final int siteNumber;
+  final Booking booking;
   final List<OrderProduct> products;
-  final String? bookingId;
 
   @override
   State<BookingOrderDialog> createState() => _BookingOrderDialogState();
@@ -23,6 +22,39 @@ class BookingOrderDialog extends StatefulWidget {
 class _BookingOrderDialogState extends State<BookingOrderDialog> {
   final quantities = <String, int>{};
   String? selectedProductId;
+  DateTime? serviceDate;
+
+  @override
+  void initState() {
+    super.initState();
+    final arrival = widget.booking.arrivalDate;
+    final departure = widget.booking.departureDate;
+    final today = DateUtils.dateOnly(DateTime.now());
+    if (arrival != null && departure != null) {
+      serviceDate = today.isBefore(arrival)
+          ? arrival
+          : today.isAfter(departure)
+              ? departure
+              : today;
+    }
+  }
+
+  Future<void> _chooseDate() async {
+    final arrival = widget.booking.arrivalDate;
+    final departure = widget.booking.departureDate;
+    if (arrival == null || departure == null || serviceDate == null) {
+      return;
+    }
+    final chosen = await showDatePicker(
+      context: context,
+      initialDate: serviceDate!,
+      firstDate: arrival,
+      lastDate: departure,
+    );
+    if (chosen != null) {
+      setState(() => serviceDate = chosen);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,11 +63,24 @@ class _BookingOrderDialogState extends State<BookingOrderDialog> {
         .toList();
 
     return AlertDialog(
-      title: Text('Bestellung für Platz ${widget.siteNumber}'),
+      title: Text('Bestellung für Platz ${widget.booking.siteNumber}'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.event_outlined),
+              title: const Text('Bereitstellung'),
+              subtitle: Text(
+                serviceDate == null
+                    ? 'Kein gültiger Buchungszeitraum'
+                    : MaterialLocalizations.of(context).formatMediumDate(
+                        serviceDate!,
+                      ),
+              ),
+              onTap: serviceDate == null ? null : _chooseDate,
+            ),
             Row(
               children: [
                 Expanded(
@@ -91,7 +136,11 @@ class _BookingOrderDialogState extends State<BookingOrderDialog> {
           child: const Text('Abbrechen'),
         ),
         FilledButton(
-          onPressed: selectedProducts.isEmpty ? null : _save,
+            onPressed: selectedProducts.isEmpty ||
+                serviceDate == null ||
+                widget.booking.id == null
+              ? null
+              : _save,
           child: const Text('Bestellung speichern'),
         ),
       ],
@@ -99,24 +148,27 @@ class _BookingOrderDialogState extends State<BookingOrderDialog> {
   }
 
   void _save() {
+    final date = serviceDate!;
     final orders = [
       for (final product in widget.products)
         if (quantities.containsKey(product.id))
           Order(
-            siteNumber: widget.siteNumber,
-            bookingId: widget.bookingId,
+            siteNumber: widget.booking.siteNumber,
+            bookingId: widget.booking.id,
             description: product.name,
             quantity: quantities[product.id] ?? 1,
             category: product.category,
             productId: product.id,
             unitPrice: product.unitPrice,
+            serviceDate: date,
           ),
     ];
     Navigator.pop(
       context,
       OrderBatch(
-        siteNumber: widget.siteNumber,
-        bookingId: widget.bookingId,
+        siteNumber: widget.booking.siteNumber,
+        bookingId: widget.booking.id,
+        serviceDate: date,
         items: orders,
       ),
     );

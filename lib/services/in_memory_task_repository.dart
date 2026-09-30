@@ -1,3 +1,4 @@
+import '../models/order.dart';
 import '../models/task.dart';
 import 'task_repository.dart';
 
@@ -33,5 +34,42 @@ class InMemoryTaskRepository implements TaskRepository {
     if (index == -1) throw StateError('Task not found: ${task.title}');
     _tasks[index] = task;
     return task;
+  }
+
+  @override
+  Future<List<CampingTask>> syncOrders(List<Order> orders) async {
+    final grouped = <String, List<Order>>{};
+    for (final order in orders) {
+      if (order.status != OrderStatus.open) continue;
+      final key = order.productId == null
+          ? 'order:${order.category.name}:${order.description}'
+          : 'order:${order.productId}';
+      grouped.putIfAbsent(key, () => []).add(order);
+    }
+    _tasks.removeWhere((task) => task.isAutomatic);
+    for (final entry in grouped.entries) {
+      final first = entry.value.first;
+      final quantity = entry.value.fold<int>(
+        0,
+        (total, order) => total + order.quantity,
+      );
+      _tasks.add(
+        CampingTask(
+          id: entry.key,
+          taskKey: entry.key,
+          title: first.description,
+          quantity: '$quantity',
+          category: first.category == OrderCategory.bakery
+              ? TaskCategory.bakery
+              : TaskCategory.kiosk,
+        ),
+      );
+    }
+    return tasks;
+  }
+
+  @override
+  Future<void> complete(CampingTask task) async {
+    _tasks.removeWhere((item) => item.id == task.id);
   }
 }

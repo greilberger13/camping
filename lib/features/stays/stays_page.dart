@@ -10,7 +10,6 @@ import '../../models/order_product.dart';
 import '../../models/stay_note.dart';
 import '../../shared/widgets/page_frame.dart';
 import 'booking_order_dialog.dart';
-import 'order_product_dialog.dart';
 import 'stay_note_dialog.dart';
 
 class StaysPage extends StatefulWidget {
@@ -18,32 +17,22 @@ class StaysPage extends StatefulWidget {
     required this.bookings,
     required this.orders,
     required this.products,
-    required this.electricityBySite,
     required this.onOrderBatchAdded,
     required this.onOrderUpdated,
-    required this.onProductAdded,
-    required this.onProductUpdated,
-    required this.onProductDeleted,
     required this.notes,
     required this.onNoteAdded,
     required this.onNoteDeleted,
-    required this.onElectricityChanged,
     super.key,
   });
 
   final List<Booking> bookings;
   final List<Order> orders;
   final List<OrderProduct> products;
-  final Map<int, bool> electricityBySite;
   final ValueChanged<OrderBatch> onOrderBatchAdded;
   final ValueChanged<Order> onOrderUpdated;
-  final ValueChanged<OrderProduct> onProductAdded;
-  final ValueChanged<OrderProduct> onProductUpdated;
-  final ValueChanged<String> onProductDeleted;
   final List<StayNote> notes;
   final ValueChanged<StayNote> onNoteAdded;
   final ValueChanged<StayNote> onNoteDeleted;
-  final void Function(int siteNumber, bool enabled) onElectricityChanged;
 
   @override
   State<StaysPage> createState() => _StaysPageState();
@@ -53,6 +42,7 @@ class _StaysPageState extends State<StaysPage> {
   @override
   Widget build(BuildContext context) {
     final activeBookings = _activeBookings;
+    final upcomingBookings = _upcomingBookings;
 
     return PageFrame(
       title: 'Aufenthalt',
@@ -61,16 +51,24 @@ class _StaysPageState extends State<StaysPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _sectionTitle(context, 'Aktive Aufenthalte'),
+          if (activeBookings.isEmpty)
+            const ListTile(title: Text('Keine aktiven Aufenthalte')),
           for (final booking in activeBookings)
             _StayCard(
               booking: booking,
-              electricity: widget.electricityBySite[booking.siteNumber] ?? false,
-              onElectricityChanged: (value) {
-                widget.onElectricityChanged(booking.siteNumber, value);
-              },
-              onOrder: () => _addOrder(booking),
+              onOrder: booking.id == null ? null : () => _addOrder(booking),
               onGuestLink: () => _showGuestLink(booking.siteNumber),
             ),
+          if (upcomingBookings.isNotEmpty) ...[
+            const SizedBox(height: 28),
+            _sectionTitle(context, 'Kommende Buchungen'),
+            for (final booking in upcomingBookings)
+              _StayCard(
+                booking: booking,
+                onOrder: () => _addOrder(booking),
+                onGuestLink: () => _showGuestLink(booking.siteNumber),
+              ),
+          ],
           const SizedBox(height: 28),
           _sectionTitle(context, 'Offene Bestellungen'),
           _OrderList(
@@ -78,14 +76,6 @@ class _StaysPageState extends State<StaysPage> {
             onStatusChanged: (order, status) {
               widget.onOrderUpdated(order.copyWith(status: status));
             },
-          ),
-          const SizedBox(height: 28),
-          _sectionTitle(context, 'Artikelkatalog'),
-          _ProductCatalog(
-            products: widget.products,
-            onAdd: _addProduct,
-            onEdit: _editProduct,
-            onDelete: _deleteProduct,
           ),
           const SizedBox(height: 28),
           _sectionTitle(context, 'Notizen'),
@@ -100,28 +90,24 @@ class _StaysPageState extends State<StaysPage> {
   }
 
   List<Booking> get _activeBookings {
-    if (widget.bookings.isNotEmpty) {
-      return widget.bookings;
-    }
+    final today = DateUtils.dateOnly(DateTime.now());
+    return widget.bookings.where((booking) {
+      final arrival = booking.arrivalDate;
+      final departure = booking.departureDate;
+      return arrival != null &&
+          departure != null &&
+          !today.isBefore(arrival) &&
+            (today.isBefore(departure) ||
+              (arrival == departure && today == arrival));
+    }).toList();
+  }
 
-    return const [
-      Booking(
-        guestName: 'Anna Berger',
-        arrival: '11.06.2026',
-        departure: '13.06.2026',
-        guests: 2,
-        hasDog: false,
-        siteNumber: 5,
-      ),
-      Booking(
-        guestName: 'Peter Bauer',
-        arrival: '10.06.2026',
-        departure: '14.06.2026',
-        guests: 2,
-        hasDog: true,
-        siteNumber: 22,
-      ),
-    ];
+  List<Booking> get _upcomingBookings {
+    final today = DateUtils.dateOnly(DateTime.now());
+    return widget.bookings.where((booking) {
+      final arrival = booking.arrivalDate;
+      return arrival != null && arrival.isAfter(today);
+    }).toList();
   }
 
   Widget _sectionTitle(BuildContext context, String title) {
@@ -140,60 +126,13 @@ class _StaysPageState extends State<StaysPage> {
     final orderBatch = await showDialog<OrderBatch>(
       context: context,
       builder: (context) => BookingOrderDialog(
-        siteNumber: booking.siteNumber,
-        bookingId: booking.id,
+        booking: booking,
         products: widget.products,
       ),
     );
 
     if (orderBatch != null) {
       widget.onOrderBatchAdded(orderBatch);
-    }
-  }
-
-  Future<void> _addProduct() async {
-    final product = await showDialog<OrderProduct>(
-      context: context,
-      builder: (context) => const OrderProductDialog(),
-    );
-
-    if (product != null) {
-      widget.onProductAdded(product);
-    }
-  }
-
-  Future<void> _editProduct(OrderProduct product) async {
-    final updated = await showDialog<OrderProduct>(
-      context: context,
-      builder: (context) => OrderProductDialog(product: product),
-    );
-
-    if (updated != null) {
-      widget.onProductUpdated(updated);
-    }
-  }
-
-  Future<void> _deleteProduct(OrderProduct product) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Artikel löschen?'),
-        content: Text('„${product.name}“ aus dem Katalog entfernen?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Abbrechen'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Löschen'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      widget.onProductDeleted(product.id);
     }
   }
 
@@ -256,16 +195,12 @@ class _StaysPageState extends State<StaysPage> {
 class _StayCard extends StatelessWidget {
   const _StayCard({
     required this.booking,
-    required this.electricity,
-    required this.onElectricityChanged,
     required this.onOrder,
     required this.onGuestLink,
   });
 
   final Booking booking;
-  final bool electricity;
-  final ValueChanged<bool> onElectricityChanged;
-  final VoidCallback onOrder;
+  final VoidCallback? onOrder;
   final VoidCallback onGuestLink;
 
   @override
@@ -289,19 +224,14 @@ class _StayCard extends StatelessWidget {
               subtitle: Text(
                 '${booking.arrival} – ${booking.departure} · '
                 'Stellplatz ${booking.siteNumber} · '
-                '${booking.guests} Personen${booking.hasDog ? ' · Hund' : ''}',
+                '${booking.adults} Erwachsene · ${booking.children} Kinder'
+                '${booking.hasDog ? ' · Hund' : ''}'
+                '${booking.hasElectricity ? ' · Strom' : ''}',
               ),
             ),
             Row(
               children: [
-                Expanded(
-                  child: SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Strom'),
-                    value: electricity,
-                    onChanged: onElectricityChanged,
-                  ),
-                ),
+                const Spacer(),
                 OutlinedButton.icon(
                   onPressed: onOrder,
                   icon: const Icon(Icons.add_shopping_cart_outlined),
@@ -330,6 +260,14 @@ class _OrderList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    String subtitleFor(Order order) {
+      final location = 'Platz ${order.siteNumber} · ${order.categoryLabel}';
+      final date = order.serviceDate;
+      if (date == null) return location;
+      return '$location · '
+          '${MaterialLocalizations.of(context).formatMediumDate(date)}';
+    }
+
     return Card(
       child: Column(
         children: [
@@ -344,67 +282,8 @@ class _OrderList extends StatelessWidget {
               },
               secondary: const Icon(Icons.receipt_long_outlined),
               title: Text('${order.quantity} × ${order.description}'),
-              subtitle: Text(
-                'Platz ${order.siteNumber} · ${order.categoryLabel}',
-              ),
+              subtitle: Text(subtitleFor(order)),
             ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ProductCatalog extends StatelessWidget {
-  const _ProductCatalog({
-    required this.products,
-    required this.onAdd,
-    required this.onEdit,
-    required this.onDelete,
-  });
-
-  final List<OrderProduct> products;
-  final VoidCallback onAdd;
-  final ValueChanged<OrderProduct> onEdit;
-  final ValueChanged<OrderProduct> onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Column(
-        children: [
-          for (final product in products)
-            ListTile(
-              leading: const Icon(Icons.inventory_2_outlined),
-              title: Text(product.name),
-              subtitle: Text(product.categoryLabel),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('${product.unitPrice.toStringAsFixed(2)} €'),
-                  IconButton(
-                    onPressed: () => onEdit(product),
-                    tooltip: 'Artikel bearbeiten',
-                    icon: const Icon(Icons.edit_outlined),
-                  ),
-                  IconButton(
-                    onPressed: () => onDelete(product),
-                    tooltip: 'Artikel löschen',
-                    icon: const Icon(Icons.delete_outline),
-                  ),
-                ],
-              ),
-            ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: Padding(
-              padding: const EdgeInsets.only(right: 12, bottom: 12),
-              child: OutlinedButton.icon(
-                onPressed: onAdd,
-                icon: const Icon(Icons.add),
-                label: const Text('Artikel anlegen'),
-              ),
-            ),
-          ),
         ],
       ),
     );

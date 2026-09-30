@@ -66,6 +66,8 @@ class SupabaseCalendarEventRepository implements CalendarEventRepository {
       'event_time': '${event.time}:00',
       'category': _categoryValue(event.category),
       'recurrence': _recurrenceValue(event.recurrence),
+      'monthly_week': event.monthlyWeek,
+      'monthly_weekday': event.monthlyWeekday,
     };
   }
 
@@ -81,6 +83,8 @@ class SupabaseCalendarEventRepository implements CalendarEventRepository {
       time: time,
       category: _categoryFromValue(row['category'] as String),
       recurrence: _recurrenceFromValue(row['recurrence'] as String),
+      monthlyWeek: row['monthly_week'] as int?,
+      monthlyWeekday: row['monthly_weekday'] as int?,
     );
   }
 

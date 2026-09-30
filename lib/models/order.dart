@@ -19,6 +19,7 @@ class Order {
     required this.category,
     this.productId,
     this.unitPrice,
+    this.serviceDate,
     this.status = OrderStatus.open,
   });
 
@@ -30,6 +31,7 @@ class Order {
   final OrderCategory category;
   final String? productId;
   final double? unitPrice;
+  final DateTime? serviceDate;
   final OrderStatus status;
 
   Order copyWith({String? id, OrderStatus? status}) {
@@ -42,6 +44,7 @@ class Order {
       category: category,
       productId: productId,
       unitPrice: unitPrice,
+      serviceDate: serviceDate,
       status: status ?? this.status,
     );
   }

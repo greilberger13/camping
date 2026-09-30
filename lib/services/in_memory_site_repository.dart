@@ -2,8 +2,11 @@ import '../models/camp_site.dart';
 import 'site_repository.dart';
 
 class InMemorySiteRepository implements SiteRepository {
-  InMemorySiteRepository({List<CampSite> initial = CampSite.samples})
-      : _sites = List<CampSite>.of(initial);
+  InMemorySiteRepository({List<CampSite>? initial})
+      : _sites = [
+          for (final site in initial ?? CampSite.samples)
+            initial == null ? site.copyWith(status: 'Frei') : site,
+        ];
 
   final List<CampSite> _sites;
 

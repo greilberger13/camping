@@ -28,6 +28,7 @@ class SupabaseBookingRepository implements BookingRepository {
 
   @override
   Future<Booking> create(Booking booking) async {
+    _validate(booking);
     final siteId = await _siteIdForNumber(booking.siteNumber);
     final row = await database.client
         .from('bookings')
@@ -45,6 +46,7 @@ class SupabaseBookingRepository implements BookingRepository {
       throw StateError('Cannot update a booking without an id.');
     }
 
+    _validate(booking);
     final siteId = await _siteIdForNumber(booking.siteNumber);
     final row = await database.client
         .from('bookings')
@@ -81,6 +83,22 @@ class SupabaseBookingRepository implements BookingRepository {
     return row['id'] as String;
   }
 
+  void _validate(Booking booking) {
+    final arrival = booking.arrivalDate;
+    final departure = booking.departureDate;
+    if (arrival == null ||
+        departure == null ||
+        departure.isBefore(arrival) ||
+        booking.adults < 1 ||
+        booking.children < 0 ||
+        booking.guestName.trim().isEmpty) {
+      throw StateError('Ungültige Buchungsdaten oder Datumsreihenfolge.');
+    }
+    if (cache.any((existing) => booking.conflictsWith(existing))) {
+      throw StateError('Stellplatz im Zeitraum bereits gebucht.');
+    }
+  }
+
   Map<String, dynamic> _toRow(Booking booking, {required String siteId}) {
     return {
       'guest_name': booking.guestName,
@@ -89,8 +107,11 @@ class SupabaseBookingRepository implements BookingRepository {
       'phone': booking.phone,
       'arrival_date': _dateValue(booking.arrivalDate),
       'departure_date': _dateValue(booking.departureDate),
-      'guests': booking.guests,
+      'adults': booking.adults,
+      'children': booking.children,
       'has_dog': booking.hasDog,
+      'has_electricity': booking.hasElectricity,
+      'late_checkout': booking.lateCheckout,
       'vehicle_type': _vehicleValue(booking.vehicleType),
       'site_id': siteId,
       'status': 'open',
@@ -107,8 +128,11 @@ class SupabaseBookingRepository implements BookingRepository {
       phone: row['phone'] as String?,
       arrival: _displayDate(row['arrival_date'] as String),
       departure: _displayDate(row['departure_date'] as String),
-      guests: row['guests'] as int,
+      adults: row['adults'] as int,
+      children: row['children'] as int,
       hasDog: row['has_dog'] as bool,
+      hasElectricity: row['has_electricity'] as bool,
+      lateCheckout: row['late_checkout'] as bool,
       vehicleType: _vehicleFromValue(row['vehicle_type'] as String),
       siteNumber: site['site_number'] as int,
     );

@@ -7,6 +7,8 @@ class SupabaseDatabase {
 
   final SupabaseClient client;
   static SupabaseClient? _cachedClient;
+  static Future<SupabaseClient>? _initializing;
+  static Future<void>? _signingIn;
 
   static Future<SupabaseDatabase?> connect({
     SupabaseConfig config = SupabaseConfig.empty,
@@ -18,7 +20,7 @@ class SupabaseDatabase {
     final client = await _clientFor(config);
 
     if (client.auth.currentSession == null) {
-      await client.auth.signInAnonymously();
+      await (_signingIn ??= _signIn(client));
     }
 
     return SupabaseDatabase._(client);
@@ -30,11 +32,30 @@ class SupabaseDatabase {
       return cachedClient;
     }
 
-    await Supabase.initialize(
-      url: config.url,
-      anonKey: config.anonKey,
-    );
-    _cachedClient = Supabase.instance.client;
-    return _cachedClient!;
+    return _initializing ??= _initialize(config);
+  }
+
+  static Future<void> _signIn(SupabaseClient client) async {
+    try {
+      if (client.auth.currentSession == null) {
+        await client.auth.signInAnonymously();
+      }
+    } finally {
+      _signingIn = null;
+    }
+  }
+
+  static Future<SupabaseClient> _initialize(SupabaseConfig config) async {
+    try {
+      await Supabase.initialize(
+        url: config.url,
+        anonKey: config.anonKey,
+      );
+      _cachedClient = Supabase.instance.client;
+      return _cachedClient!;
+    } catch (_) {
+      _initializing = null;
+      rethrow;
+    }
   }
 }

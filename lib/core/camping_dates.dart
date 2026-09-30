@@ -1,10 +1,14 @@
 class CampingDates {
   const CampingDates._();
 
-  static final operationalDay = DateTime(2026, 6, 11);
-  static final defaultArrival = DateTime(2026, 6, 11);
-  static final defaultDeparture = DateTime(2026, 6, 14);
-  static final initialWeek = DateTime(2026, 6, 8);
+  static DateTime get operationalDay => DateTime.now();
+  static DateTime get defaultArrival => operationalDay;
+  static DateTime get defaultDeparture => operationalDay.add(
+        const Duration(days: 1),
+      );
+  static DateTime get initialWeek => operationalDay.subtract(
+        Duration(days: operationalDay.weekday - 1),
+      );
 
   static String formatDate(DateTime date) {
     final day = date.day.toString().padLeft(2, '0');

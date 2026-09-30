@@ -62,10 +62,28 @@ class InMemoryOrderRepository implements OrderRepository {
 
   @override
   Future<List<Order>> createOrderBatch(OrderBatch batch) async {
-    final stored = <Order>[];
-    for (final item in batch.items) {
-      stored.add(await createOrder(item));
+    if (batch.bookingId == null || batch.items.isEmpty) {
+      throw StateError('A batch requires a booking and products.');
     }
+    final productIds = <String>{};
+    for (final item in batch.items) {
+      if (item.productId == null ||
+          !productIds.add(item.productId!) ||
+          !_products.any((product) => product.id == item.productId) ||
+          item.quantity < 1 ||
+          item.bookingId != batch.bookingId ||
+          item.siteNumber != batch.siteNumber ||
+          item.serviceDate != batch.serviceDate) {
+        throw StateError('Invalid batch item.');
+      }
+    }
+
+    final prefix = _newId();
+    final stored = <Order>[
+      for (var index = 0; index < batch.items.length; index++)
+        batch.items[index].copyWith(id: '$prefix-$index'),
+    ];
+    _orders.addAll(stored);
     return stored;
   }
 

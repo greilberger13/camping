@@ -34,9 +34,10 @@ class _BookingsPageState extends State<BookingsPage> {
   @override
   Widget build(BuildContext context) {
     final filteredBookings = _filteredBookings;
-    final occupiedSites = widget.bookings.isEmpty
-        ? 18
-        : widget.bookings.map((booking) => booking.siteNumber).toSet().length;
+    final occupiedSites = widget.bookings
+      .map((booking) => booking.siteNumber)
+      .toSet()
+      .length;
     final pageSubtitle = '${CampingDates.monthName(CampingDates.operationalDay.month)} '
         '${CampingDates.operationalDay.year} · $occupiedSites eigene Stellplätze';
 
@@ -69,46 +70,8 @@ class _BookingsPageState extends State<BookingsPage> {
           Card(
             child: Column(
               children: [
-                ListTile(
-                  onTap: () => _showBookingDetails(
-                    context,
-                    const Booking(
-                      guestName: 'Familie Huber',
-                      arrival: '08.06.2026',
-                      departure: '14.06.2026',
-                      guests: 4,
-                      hasDog: false,
-                      siteNumber: 1,
-                    ),
-                  ),
-                  leading: CircleAvatar(
-                    backgroundColor: Color(0xffa9ed21),
-                    child: Text('1'),
-                  ),
-                  title: Text('Familie Huber · bis 14.06.'),
-                  subtitle: Text('Stellplatz 1 · Wohnmobil'),
-                  trailing: Chip(label: Text('Belegt')),
-                ),
-                ListTile(
-                  onTap: () => _showBookingDetails(
-                    context,
-                    const Booking(
-                      guestName: 'Eva Gruber',
-                      arrival: '20.06.2026',
-                      departure: '24.06.2026',
-                      guests: 2,
-                      hasDog: true,
-                      siteNumber: 20,
-                    ),
-                  ),
-                  leading: CircleAvatar(
-                    backgroundColor: Color(0xffff6ba8),
-                    child: Text('20'),
-                  ),
-                  title: Text('Eva Gruber · ab 20.06.'),
-                  subtitle: Text('Stellplatz 20 · Auto mit Anhänger'),
-                  trailing: Chip(label: Text('Reserviert')),
-                ),
+                if (filteredBookings.isEmpty)
+                  const ListTile(title: Text('Keine Buchungen gefunden')),
                 for (final booking in filteredBookings)
                   _BookingListTile(
                     booking: booking,
@@ -392,8 +355,10 @@ class _BookingListTile extends StatelessWidget {
     final guestDetails = [
       'Stellplatz ${booking.siteNumber}',
       booking.vehicleType.label,
-      '${booking.guests} Personen',
+      '${booking.adults} Erwachsene, ${booking.children} Kinder',
       if (booking.hasDog) 'Hund',
+      if (booking.hasElectricity) 'Strom',
+      if (booking.lateCheckout) 'Late-Check-Out',
       if (booking.phone != null) booking.phone!,
     ].join(' · ');
 
@@ -452,9 +417,18 @@ class _BookingDetails extends StatelessWidget {
             style: const TextStyle(color: Color(0xff61716d)),
           ),
           const SizedBox(height: 20),
-          _DetailRow(label: 'Personen', value: '${booking.guests}'),
+          _DetailRow(label: 'Erwachsene', value: '${booking.adults}'),
+          _DetailRow(label: 'Kinder', value: '${booking.children}'),
           _DetailRow(label: 'Fahrzeugart', value: booking.vehicleType.label),
           _DetailRow(label: 'Hund', value: booking.hasDog ? 'Ja' : 'Nein'),
+          _DetailRow(
+            label: 'Strom',
+            value: booking.hasElectricity ? 'Ja' : 'Nein',
+          ),
+          _DetailRow(
+            label: 'Late-Check-Out',
+            value: booking.lateCheckout ? 'Ja' : 'Nein',
+          ),
           _DetailRow(label: 'Adresse', value: booking.address ?? 'Nicht erfasst'),
           _DetailRow(
             label: 'Geburtsdatum',
