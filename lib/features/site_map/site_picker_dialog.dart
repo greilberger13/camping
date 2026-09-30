@@ -210,10 +210,10 @@ class _SitePickerDialogState extends State<SitePickerDialog> {
     ).position;
     final available = validDates && _available(site);
     return Positioned(
-      left: position.dx * size,
-      top: position.dy * size,
-      width: 42,
-      height: 34,
+      left: position.dx * size - 5,
+      top: position.dy * size - 5,
+      width: 36,
+      height: 28,
       child: Tooltip(
         message: 'Platz ${site.number}: '
             '${available ? 'frei' : 'nicht verfügbar'}',
@@ -240,7 +240,7 @@ class _SitePickerDialogState extends State<SitePickerDialog> {
             ),
             child: site.status == 'Gesperrt'
                 ? const Center(
-                    child: Icon(Icons.close, color: Colors.white, size: 33),
+                    child: Icon(Icons.close, color: Colors.white, size: 24),
                   )
                 : null,
           ),

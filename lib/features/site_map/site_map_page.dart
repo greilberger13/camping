@@ -308,8 +308,8 @@ class _ImageSiteOverlay extends StatelessWidget {
     );
 
     return Positioned(
-      left: horizontalOffset + position.dx * imageSize,
-      top: verticalOffset + position.dy * imageSize,
+      left: horizontalOffset + position.dx * imageSize - 5,
+      top: verticalOffset + position.dy * imageSize - 5,
       width: 48,
       height: 40,
       child: calibrating
