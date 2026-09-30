@@ -22,35 +22,64 @@ class TasksPage extends StatefulWidget {
 class _TasksPageState extends State<TasksPage> {
   @override
   Widget build(BuildContext context) {
+    final purchases = widget.tasks.where((task) => task.isAutomatic).toList();
+    final activities = widget.tasks.where((task) => !task.isAutomatic).toList();
+
     return PageFrame(
       title: 'Aufgaben',
-      subtitle: 'Bestellungen und Einkauf für den heutigen Betrieb',
+      subtitle: 'Einkäufe und Tätigkeiten',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton.icon(
-              onPressed: _addTask,
-              icon: const Icon(Icons.add),
-              label: const Text('Aufgabe'),
-            ),
+          Text(
+            'Einkäufe für Bestellungen',
+            style: Theme.of(context).textTheme.titleLarge,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Card(
             child: Column(
               children: [
-                for (var index = 0; index < widget.tasks.length; index++)
+                for (final task in purchases)
                   _TaskTile(
-                    task: widget.tasks[index],
+                    task: task,
                     onChanged: (value) {
-                      if (value) {
-                        widget.onTaskCompleted(widget.tasks[index]);
-                      }
+                      if (value) widget.onTaskCompleted(task);
                     },
                   ),
-                if (widget.tasks.isEmpty)
-                  const ListTile(title: Text('Keine offenen Aufgaben')),
+                if (purchases.isEmpty)
+                  const ListTile(title: Text('Keine offenen Einkäufe')),
+              ],
+            ),
+          ),
+          const SizedBox(height: 28),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Weitere Tätigkeiten',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              IconButton(
+                onPressed: _addTask,
+                icon: const Icon(Icons.add),
+                tooltip: 'Tätigkeit hinzufügen',
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Column(
+              children: [
+                for (final task in activities)
+                  _TaskTile(
+                    task: task,
+                    onChanged: (value) {
+                      if (value) widget.onTaskCompleted(task);
+                    },
+                  ),
+                if (activities.isEmpty)
+                  const ListTile(title: Text('Keine offenen Tätigkeiten')),
               ],
             ),
           ),
@@ -90,7 +119,11 @@ class _TaskTile extends StatelessWidget {
           decoration: task.isDone ? TextDecoration.lineThrough : null,
         ),
       ),
-      subtitle: Text('${task.quantity} · ${task.categoryLabel}'),
+      subtitle: Text(
+        task.quantity.isEmpty
+        ? task.categoryLabel
+        : '${task.quantity} · ${task.categoryLabel}',
+      ),
     );
   }
 

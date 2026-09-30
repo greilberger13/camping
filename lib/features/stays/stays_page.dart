@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../models/booking.dart';
-import '../../models/guest_order_link.dart';
 import '../../models/order.dart';
 import '../../models/order_batch.dart';
 import '../../models/order_product.dart';
 import '../../models/stay_note.dart';
 import '../../shared/widgets/page_frame.dart';
 import 'booking_order_dialog.dart';
+import 'guest_order_link_dialog.dart';
 import 'stay_note_dialog.dart';
 
 class StaysPage extends StatefulWidget {
@@ -57,7 +55,10 @@ class _StaysPageState extends State<StaysPage> {
             _StayCard(
               booking: booking,
               onOrder: booking.id == null ? null : () => _addOrder(booking),
-              onGuestLink: () => _showGuestLink(booking.siteNumber),
+              onGuestLink: () => showGuestOrderLink(
+                context,
+                booking.siteNumber,
+              ),
             ),
           if (upcomingBookings.isNotEmpty) ...[
             const SizedBox(height: 28),
@@ -66,12 +67,15 @@ class _StaysPageState extends State<StaysPage> {
               _StayCard(
                 booking: booking,
                 onOrder: () => _addOrder(booking),
-                onGuestLink: () => _showGuestLink(booking.siteNumber),
+                onGuestLink: () => showGuestOrderLink(
+                  context,
+                  booking.siteNumber,
+                ),
               ),
           ],
           const SizedBox(height: 28),
           _sectionTitle(context, 'Offene Bestellungen'),
-          _OrderList(
+          StayOrderList(
             orders: widget.orders,
             onStatusChanged: (order, status) {
               widget.onOrderUpdated(order.copyWith(status: status));
@@ -79,7 +83,7 @@ class _StaysPageState extends State<StaysPage> {
           ),
           const SizedBox(height: 28),
           _sectionTitle(context, 'Notizen'),
-          _NotesSection(
+          StayNotesSection(
             notes: widget.notes,
             onAdd: _addNote,
             onDelete: widget.onNoteDeleted,
@@ -134,47 +138,6 @@ class _StaysPageState extends State<StaysPage> {
     if (orderBatch != null) {
       widget.onOrderBatchAdded(orderBatch);
     }
-  }
-
-  Future<void> _showGuestLink(int siteNumber) async {
-    final link = GuestOrderLink.forSite(siteNumber);
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Gastbestellung · Platz $siteNumber'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            QrImageView(
-              data: link.url,
-              size: 220,
-              backgroundColor: Colors.white,
-            ),
-            const SizedBox(height: 16),
-            SelectableText(link.url),
-          ],
-        ),
-        actions: [
-          TextButton.icon(
-            onPressed: () async {
-              await Clipboard.setData(ClipboardData(text: link.url));
-              if (context.mounted) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(this.context).showSnackBar(
-                  const SnackBar(content: Text('Bestelllink kopiert.')),
-                );
-              }
-            },
-            icon: const Icon(Icons.copy_outlined),
-            label: const Text('Link kopieren'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Schließen'),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _addNote() async {
@@ -252,8 +215,12 @@ class _StayCard extends StatelessWidget {
   }
 }
 
-class _OrderList extends StatelessWidget {
-  const _OrderList({required this.orders, required this.onStatusChanged});
+class StayOrderList extends StatelessWidget {
+  const StayOrderList({
+    required this.orders,
+    required this.onStatusChanged,
+    super.key,
+  });
 
   final List<Order> orders;
   final void Function(Order order, OrderStatus status) onStatusChanged;
@@ -271,6 +238,8 @@ class _OrderList extends StatelessWidget {
     return Card(
       child: Column(
         children: [
+          if (orders.isEmpty)
+            const ListTile(title: Text('Keine Bestellungen')),
           for (final order in orders)
             CheckboxListTile(
               value: order.status == OrderStatus.completed,
@@ -290,11 +259,12 @@ class _OrderList extends StatelessWidget {
   }
 }
 
-class _NotesSection extends StatelessWidget {
-  const _NotesSection({
+class StayNotesSection extends StatelessWidget {
+  const StayNotesSection({
     required this.notes,
     required this.onAdd,
     required this.onDelete,
+    super.key,
   });
 
   final List<StayNote> notes;

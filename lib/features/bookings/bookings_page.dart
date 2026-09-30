@@ -3,20 +3,37 @@ import 'package:flutter/material.dart';
 import '../../core/camping_dates.dart';
 import '../../integrations/feratel/feratel_gateway.dart';
 import '../../models/booking.dart';
+import '../../models/order.dart';
+import '../../models/stay_note.dart';
 import '../../models/vehicle_type.dart';
 import '../../shared/widgets/page_frame.dart';
+import '../stays/guest_order_link_dialog.dart';
+import '../stays/stay_note_dialog.dart';
+import '../stays/stays_page.dart';
 
 class BookingsPage extends StatefulWidget {
   const BookingsPage({
     required this.bookings,
     required this.onDelete,
     required this.onEdit,
+    required this.onOrder,
+    required this.orders,
+    required this.onOrderUpdated,
+    required this.notes,
+    required this.onNoteAdded,
+    required this.onNoteDeleted,
     super.key,
   });
 
   final List<Booking> bookings;
   final ValueChanged<Booking> onDelete;
   final ValueChanged<Booking> onEdit;
+  final ValueChanged<Booking> onOrder;
+  final List<Order> orders;
+  final ValueChanged<Order> onOrderUpdated;
+  final List<StayNote> notes;
+  final ValueChanged<StayNote> onNoteAdded;
+  final ValueChanged<StayNote> onNoteDeleted;
 
   @override
   State<BookingsPage> createState() => _BookingsPageState();
@@ -78,9 +95,43 @@ class _BookingsPageState extends State<BookingsPage> {
                     onExport: () => _prepareFeratelReport(booking),
                     onDelete: () => _confirmDelete(context, booking),
                     onEdit: () => widget.onEdit(booking),
+                    onOrder: () => widget.onOrder(booking),
+                    onGuestLink: () => showGuestOrderLink(
+                      context,
+                      booking.siteNumber,
+                    ),
                   ),
               ],
             ),
+          ),
+          const SizedBox(height: 28),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Bestellungen',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+          ),
+          const SizedBox(height: 12),
+          StayOrderList(
+            orders: widget.orders,
+            onStatusChanged: (order, status) {
+              widget.onOrderUpdated(order.copyWith(status: status));
+            },
+          ),
+          const SizedBox(height: 28),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Notizen',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+          ),
+          const SizedBox(height: 12),
+          StayNotesSection(
+            notes: widget.notes,
+            onAdd: _addNote,
+            onDelete: widget.onNoteDeleted,
           ),
         ],
       ),
@@ -93,6 +144,18 @@ class _BookingsPageState extends State<BookingsPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(result.message ?? 'Export vorbereitet.')),
     );
+  }
+
+  Future<void> _addNote() async {
+    final siteNumbers = widget.bookings
+        .map((booking) => booking.siteNumber)
+        .toSet()
+        .toList()..sort();
+    final note = await showDialog<StayNote>(
+      context: context,
+      builder: (context) => StayNoteDialog(siteNumbers: siteNumbers),
+    );
+    if (note != null) widget.onNoteAdded(note);
   }
 
   List<Booking> get _filteredBookings {
@@ -343,12 +406,16 @@ class _BookingListTile extends StatelessWidget {
     required this.onExport,
     required this.onDelete,
     required this.onEdit,
+    required this.onOrder,
+    required this.onGuestLink,
   });
 
   final Booking booking;
   final VoidCallback onExport;
   final VoidCallback onDelete;
   final VoidCallback onEdit;
+  final VoidCallback onOrder;
+  final VoidCallback onGuestLink;
 
   @override
   Widget build(BuildContext context) {
@@ -362,18 +429,17 @@ class _BookingListTile extends StatelessWidget {
       if (booking.phone != null) booking.phone!,
     ].join(' · ');
 
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: const Color(0xffa9ed21),
-        child: Text('${booking.siteNumber}'),
-      ),
-      title: Text(
-        '${booking.guestName} · ${booking.arrival} – ${booking.departure}',
-      ),
-      subtitle: Text(guestDetails),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
+    final actions = <Widget>[
+          IconButton(
+            onPressed: booking.id == null ? null : onOrder,
+            tooltip: 'Bestellung für diese Buchung erstellen',
+            icon: const Icon(Icons.add_shopping_cart_outlined),
+          ),
+          IconButton(
+            onPressed: onGuestLink,
+            tooltip: 'Gast-Bestelllink',
+            icon: const Icon(Icons.link_outlined),
+          ),
           IconButton(
             onPressed: onEdit,
             tooltip: 'Buchung bearbeiten',
@@ -389,8 +455,35 @@ class _BookingListTile extends StatelessWidget {
             tooltip: 'Buchung löschen',
             icon: const Icon(Icons.delete_outline),
           ),
-        ],
-      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 680;
+        final details = ListTile(
+          leading: CircleAvatar(
+            backgroundColor: const Color(0xffa9ed21),
+            child: Text('${booking.siteNumber}'),
+          ),
+          title: Text(
+            '${booking.guestName} · ${booking.arrival} – ${booking.departure}',
+          ),
+          subtitle: Text(guestDetails),
+          trailing: compact
+              ? null
+              : Row(mainAxisSize: MainAxisSize.min, children: actions),
+        );
+        if (!compact) return details;
+        return Column(
+          children: [
+            details,
+            Align(
+              alignment: Alignment.centerRight,
+              child: Row(mainAxisSize: MainAxisSize.min, children: actions),
+            ),
+          ],
+        );
+      },
     );
   }
 }

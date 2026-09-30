@@ -38,14 +38,13 @@ import '../../services/in_memory_calendar_event_repository.dart';
 import '../../services/supabase_calendar_event_repository.dart';
 import '../bookings/booking_dialog.dart';
 import '../bookings/bookings_page.dart';
-import '../bookings/bookings_stays_page.dart';
 import '../calendar/calendar_page.dart';
 import '../checkout/checkout_page.dart';
 import '../dashboard/dashboard_page.dart';
 import '../settings/settings_page.dart';
 import '../site_map/site_map_page.dart';
 import '../statistics/statistics_page.dart';
-import '../stays/stays_page.dart';
+import '../stays/booking_order_dialog.dart';
 import '../tasks/tasks_page.dart';
 
 class CampingHomePage extends StatefulWidget {
@@ -269,33 +268,27 @@ class _CampingHomePageState extends State<CampingHomePage> {
   Widget _page(BuildContext context) {
     switch (selected) {
       case 1:
-        return BookingsStaysPage(
-          bookings: BookingsPage(
-            bookings: newBookings,
-            onDelete: (booking) => unawaited(
-              _perform(() => _deleteBooking(booking)),
-            ),
-            onEdit: (booking) => unawaited(
-              _perform(() => _editBooking(booking)),
-            ),
+        return BookingsPage(
+          bookings: newBookings,
+          onDelete: (booking) => unawaited(
+            _perform(() => _deleteBooking(booking)),
           ),
-          stays: StaysPage(
-            bookings: newBookings,
-            orders: orders,
-            products: products,
-            onOrderBatchAdded: (batch) => unawaited(
-              _perform(() => _addOrderBatch(batch)),
-            ),
-            onOrderUpdated: (order) => unawaited(
-              _perform(() => _updateOrder(order)),
-            ),
-            notes: notes,
-            onNoteAdded: (note) => unawaited(
-              _perform(() => _addNote(note)),
-            ),
-            onNoteDeleted: (note) => unawaited(
-              _perform(() => _deleteNote(note)),
-            ),
+          onEdit: (booking) => unawaited(
+            _perform(() => _editBooking(booking)),
+          ),
+          onOrder: (booking) => unawaited(
+            _perform(() => _openOrderForBooking(booking)),
+          ),
+          orders: orders,
+          onOrderUpdated: (order) => unawaited(
+            _perform(() => _updateOrder(order)),
+          ),
+          notes: notes,
+          onNoteAdded: (note) => unawaited(
+            _perform(() => _addNote(note)),
+          ),
+          onNoteDeleted: (note) => unawaited(
+            _perform(() => _deleteNote(note)),
           ),
         );
       case 2:
@@ -549,6 +542,18 @@ class _CampingHomePageState extends State<CampingHomePage> {
     await orderRepository.createOrderBatch(batch);
     await taskRepository.syncOrders(orders);
     if (mounted) setState(() {});
+  }
+
+  Future<void> _openOrderForBooking(Booking booking) async {
+    if (booking.id == null) return;
+    final batch = await showDialog<OrderBatch>(
+      context: context,
+      builder: (context) => BookingOrderDialog(
+        booking: booking,
+        products: products,
+      ),
+    );
+    if (batch != null) await _addOrderBatch(batch);
   }
 
   Future<void> _updateOrder(Order order) async {
